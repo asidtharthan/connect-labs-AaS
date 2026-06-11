@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}Connect Interviews{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-8" x-data="interviewsDashboard()">
+
+  <!-- CSRF token (read by JS for AJAX POSTs; CSRF_USE_SESSIONS=True so we can't use the cookie) -->
+  {% csrf_token %}
+
+  <!-- Header -->
+  <div class="mb-6 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-gray-900">Connect Interviews</h1>
+    </div>
+
+    <!-- Sync controls -->
+    <div class="flex items-center gap-2">
+      <div class="text-right">
+        <div class="text-xs text-gray-500" x-show="!syncTaskId">
+          <template x-if="lastSyncedAt">
+            <span>Last synced: <span x-text="formatRelative(lastSyncedAt)"></span></span>
+          </template>
+          <template x-if="!lastSyncedAt">
+            <span>Never synced</span>
+          </template>
+          <span x-show="sessionsProcessed" class="text-gray-400">
+            (<span x-text="sessionsProcessed"></span> sessions)
+          </span>
+        </div>
+        <div class="text-xs text-indigo-600" x-show="syncTaskId" x-cloak>
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <span x-text="syncMessage || 'Syncing...'"></span>
+        </div>
+      </div>
+      <button @click="triggerSync(false, null)"
+              :disabled="syncTaskId !== null"
+              title="Pulls only new OCS sessions since the last sync — usually under a minute"
+              class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+        <i class="fa-solid fa-arrows-rotate"></i> Sync new
+      </button>
+    </div>
+  </div>
+
+  <!-- Error Banner -->
+  <template x-if="error">
+    <div class="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-800 mb-6">
+      <strong>Error:</strong> <span x-text="error"></span>
+    </div>
+  </template>
+
+  <!-- Tabs -->
+  <div class="border-b border-gray-200 mb-6">
+    <nav class="-mb-px flex gap-6">
+      <button @click="activeTab = 'cohorts'"
+              :class="activeTab === 'cohorts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+              class="py-3 px-1 border-b-2 text-sm font-medium transition-colors">
+        Cohort Metrics
+      </button>
+      <button @click="activeTab = 'answers'"
+              :class="activeTab === 'answers' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+              class="py-3 px-1 border-b-2 text-sm font-medium transition-colors">
+        Answers Dataset
+      </button>
+    </nav>
+  </div>
+
+  <!-- ============== TAB 1: Cohort Metrics ============== -->
+  <div x-show="activeTab === 'cohorts'" x-cloak>
+
+    <!-- Filter Bar -->
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <label class="text-sm font-medium text-gray-600 whitespace-nowrap">Cohort name filter:</label>
+        <input type="text"
+               x-model="namePattern"
+               placeholder="regex (e.g. ABT1, TRS, EHA, COWACDI)"
+               class="flex-1 min-w-[180px] px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+
+        <label class="text-sm font-medium text-gray-600 whitespace-nowrap"
+               title="Filters on the OCS session's start time (when the bot conversation was first opened by the FLW). UTC.">
+          Bot start (UTC) — From:
+        </label>
+        <input type="date" x-model="startDate"
+               class="px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+        <label class="text-sm font-medium text-gray-600">To:</label>
+        <input type="date" x-model="endDate"
+               class="px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+
+        <button @click="loadCohortMetrics(true)"
+                :disabled="cohortLoading"
+                class="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+          <span x-show="!cohortLoading">Apply</span>
+          <span x-show="cohortLoading"><i class="fa-solid fa-spinner fa-spin"></i></span>
+        </button>
+
+        <span x-show="cohortFromCache && !cohortLoading" class="text-xs text-gray-400">
+          <i class="fa-solid fa-clock"></i> cached
+        </span>
+      </div>
+    </div>
+
+    <!-- Aggregate Summary Cards -->
+    <div x-show="totals && !cohortLoading" x-cloak class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2">
+        <div class="text-[10px] font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">Cohorts</div>
+        <div class="text-xl font-bold text-gray-900 mt-0.5" x-text="totals?.total_cohorts || 0"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2">
+        <div class="text-[10px] font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">FLWs Claimed</div>
+        <div class="text-xl font-bold text-indigo-700 mt-0.5" x-text="totals?.total_flws_claimed || 0"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2">
+        <div class="text-[10px] font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">FLWs ≥ 1 Interview</div>
+        <div class="text-xl font-bold text-emerald-700 mt-0.5" x-text="totals?.total_flws_with_completed_interview || 0"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2"
+           title="Connect's services-delivered total across all cohorts (visit_count). Includes payment-pipeline-completed deliveries from any path.">
+        <div class="text-[10px] font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">Services Delivered (Connect)</div>
+        <div class="text-xl font-bold text-blue-700 mt-0.5" x-text="totals?.total_connect_services_delivered || 0"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2"
+           title="OCS sessions with ≥1 substantive answer. Captures bot engagement; may differ from Connect's services-delivered count.">
+        <div class="text-[10px] font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">Total Interviews (OCS)</div>
+        <div class="text-xl font-bold text-emerald-700 mt-0.5" x-text="totals?.total_interviews_completed || 0"></div>
+      </div>
+    </div>
+
+    <!-- Per-Cohort Table -->
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-gray-900">Per-Cohort Metrics</h2>
+        </div>
+        <div class="flex items-center gap-3">
+          <a :href="cohortXlsxUrl"
+             x-show="!cohortLoading && cohorts.length > 0"
+             title="Download the table above as Excel — same columns, current filters applied."
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700">
+            <i class="fa-solid fa-file-excel"></i>
+            Download cohort table
+          </a>
+          <div class="text-xs text-gray-500" x-show="!cohortLoading && cohorts.length > 0">
+            <span x-text="cohorts.length"></span> cohorts
+          </div>
+        </div>
+      </div>
+
+      <div x-show="cohortLoading" class="px-6 py-12 text-center text-sm text-gray-500">
+        <i class="fa-solid fa-spinner fa-spin text-2xl text-indigo-500 mb-2"></i>
+        <div>Computing cohort metrics...</div>
+      </div>
+
+      <div x-show="!cohortLoading && !error && cohorts.length === 0" class="px-6 py-8 text-center text-sm text-gray-500">
+        No cohorts match the filter. Try adjusting the name pattern above.
+      </div>
+
+      <div x-show="!cohortLoading && cohorts.length > 0" x-cloak class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 align-bottom">
+            <tr>
+              <th class="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-50 z-10 whitespace-normal">Cohort</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="FLWs who claimed the job (from Connect)">FLWs Claimed Job</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="FLWs who completed the assessment (from Connect)">FLWs Completed Assessment</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="FLWs with at least one OCS session that has a substantive answer (>3 words)">FLWs with ≥1 Interview</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="Connect's services delivered for this cohort (visit_count). Counts every payment-pipeline-completed delivery, including non-OCS-bot paths.">Services Delivered (Connect)</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="OCS sessions with at least one completed answer (>3 words). Captures bot engagement; may differ from Connect because OCS only sees bot conversations.">Total Interviews (OCS)</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="Total expected interviews per cohort's claim_limits (max_visits × claimed FLWs)">Expected Interviews</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="OCS Total Interviews ÷ Expected. Caps display at 100%+ when FLWs run the bot more than expected.">Completion Rate</th>
+              <th class="px-2 py-2 text-right font-semibold whitespace-normal" title="Median word count per parent question answered. Multi-part sub-rows (e.g. A.5a/b/c/d) are summed back to their parent question before medianing, so one multi-part answer counts as one response.">Median Word Count</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template x-for="c in cohorts" :key="c.opportunity_id">
+              <tr class="hover:bg-indigo-50/30 transition-colors">
+                <td class="px-2 py-2 font-medium text-gray-900 sticky left-0 bg-white whitespace-nowrap" x-text="c.cohort"></td>
+                <td class="px-2 py-2 text-right text-indigo-700 font-medium" x-text="c.flws_claimed"></td>
+                <td class="px-2 py-2 text-right text-gray-700" x-text="c.flws_completed_assessment"></td>
+                <td class="px-2 py-2 text-right text-emerald-700 font-medium" x-text="c.flws_with_completed_interview"></td>
+                <td class="px-2 py-2 text-right text-blue-700 font-medium"
+                    :title="(c.connect_approved || 0) + ' approved + ' + (c.connect_over_limit || 0) + ' over-limit = ' + c.connect_services_delivered"
+                    x-text="c.connect_services_delivered"></td>
+                <td class="px-2 py-2 text-right text-emerald-700 font-medium" x-text="c.interviews_completed"></td>
+                <td class="px-2 py-2 text-right text-gray-500" x-text="c.total_expected_interviews"></td>
+                <td class="px-2 py-2 text-right">
+                  <span :class="c.completion_rate >= 70 ? 'text-emerald-700 font-medium' : (c.completion_rate >= 30 ? 'text-amber-600' : 'text-gray-500')"
+                        :title="c.interviews_completed + ' OCS sessions \u00f7 ' + c.total_expected_interviews + ' expected = ' + c.completion_rate + '% (raw). 100%+ means FLWs ran more sessions than the per-FLW claim limit.'"
+                        x-text="(c.completion_rate > 100 ? '100%+' : c.completion_rate + '%')"></span>
+                </td>
+                <td class="px-2 py-2 text-right text-gray-700" x-text="c.median_message_length || '—'"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TAB 2: Answers Dataset ============== -->
+  <div x-show="activeTab === 'answers'" x-cloak>
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-2">Answers Dataset</h2>
+
+      <div class="bg-indigo-50 border border-indigo-200 rounded-md p-3 mb-4 text-sm text-indigo-900">
+        <i class="fa-solid fa-info-circle"></i>
+        Filters from the Cohort Metrics tab (date range, name pattern) are applied to the export.
+      </div>
+
+      <a :href="answersDownloadUrl"
+         class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors">
+        <i class="fa-solid fa-download"></i> Download answers.xlsx
+      </a>
+
+      <div class="mt-6 text-xs text-gray-500">
+        <p><strong>Columns:</strong> session_id, participant_id, qid, parent_qid, question_text, topic,
+        answer_text, asked, completed, num_turns, word_count, time_to_answer_seconds, extraction_method</p>
+      </div>
+
+      <hr class="my-6 border-gray-200">
+
+      <h2 class="text-lg font-semibold text-gray-900 mb-2">Per-Session Dataset</h2>
+      <div class="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4 text-sm text-blue-900">
+        <i class="fa-solid fa-info-circle"></i>
+        One row per OCS session. Built from the OCS UI's CSV export — includes
+        the rich <code class="bg-blue-100 px-1">Participant Data</code> + <code class="bg-blue-100 px-1">Session State</code>
+        fields (cohort_id, interview_status, A/B side, demographics) that aren't on the public OCS API.
+      </div>
+      <a :href="'{{ per_session_xlsx_url }}'"
+         class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">
+        <i class="fa-solid fa-download"></i> Download per-session dataset
+      </a>
+      <div class="mt-3 text-xs text-gray-500">
+        <p>~4,500 sessions × 48 columns. Includes <code>cohort_id</code>, <code>interview_status</code>
+        (interview_complete / incomplete / ongoing), <code>interview</code> (A/B/C/D/E),
+        <code>interview_topic</code>, demographics (lga, gender, dob, training_batch, type_of_flw),
+        plus message counts and word counts per session.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+function interviewsDashboard() {
+  return {
+    activeTab: 'cohorts',
+    // Cohort metrics state
+    cohortLoading: false,
+    cohortFromCache: false,
+    error: null,
+    cohorts: [],
+    totals: null,
+    namePattern: '{{ name_pattern|escapejs }}',
+    startDate: '',
+    endDate: '',
+    lastSyncedAt: null,
+    sessionsProcessed: 0,
+    // URLs from Django
+    cohortMetricsUrl: '{{ cohort_metrics_api_url }}',
+    syncTriggerUrl: '{{ sync_trigger_url }}',
+    syncStatusUrl: '{{ sync_status_url }}',
+    answersXlsxUrl: '{{ answers_xlsx_url }}',
+    cohortXlsxBaseUrl: '{{ cohort_xlsx_url }}',
+    experimentId: '{{ experiment_id|escapejs }}',
+    // Sync state
+    syncTaskId: null,
+    syncMessage: '',
+    syncPollHandle: null,
+
+    get answersDownloadUrl() {
+      var p = new URLSearchParams();
+      if (this.namePattern) p.set('cohort_pattern', this.namePattern);
+      if (this.startDate) p.set('start_date', this.startDate);
+      if (this.endDate) p.set('end_date', this.endDate);
+      var qs = p.toString();
+      return this.answersXlsxUrl + (qs ? '?' + qs : '');
+    },
+
+    get cohortXlsxUrl() {
+      var p = new URLSearchParams();
+      if (this.namePattern) p.set('name_pattern', this.namePattern);
+      if (this.startDate) p.set('start_date', this.startDate);
+      if (this.endDate) p.set('end_date', this.endDate);
+      var qs = p.toString();
+      return this.cohortXlsxBaseUrl + (qs ? '?' + qs : '');
+    },
+
+    init() {
+      this.loadCohortMetrics();
+    },
+
+    formatRelative(iso) {
+      if (!iso) return '';
+      try {
+        var d = new Date(iso);
+        var diff = (Date.now() - d.getTime()) / 1000;
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.round(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
+        return Math.round(diff / 86400) + 'd ago';
+      } catch (e) { return iso; }
+    },
+
+    async loadCohortMetrics(forceRefresh) {
+      this.cohortLoading = true;
+      this.error = null;
+      try {
+        var params = new URLSearchParams();
+        if (this.namePattern) params.set('name_pattern', this.namePattern);
+        if (this.startDate) params.set('start_date', this.startDate);
+        if (this.endDate) params.set('end_date', this.endDate);
+        if (forceRefresh) params.set('refresh', '1');
+        var url = this.cohortMetricsUrl + '?' + params.toString();
+
+        var response = await fetch(url);
+        var data = await response.json();
+        if (data.error) {
+          this.error = data.error;
+          this.cohorts = [];
+          this.totals = null;
+        } else {
+          this.cohorts = data.cohorts || [];
+          this.totals = data.totals || null;
+          this.cohortFromCache = !!data.from_cache;
+          this.lastSyncedAt = data.last_synced_at;
+          this.sessionsProcessed = data.sessions_processed || 0;
+        }
+      } catch (err) {
+        this.error = 'Failed to fetch cohort metrics: ' + err.message;
+      } finally {
+        this.cohortLoading = false;
+      }
+    },
+
+    async triggerSync(forceRefresh, maxSessions) {
+      try {
+        var fd = new FormData();
+        fd.set('experiment_id', this.experimentId);
+        if (forceRefresh) fd.set('force_refresh', '1');
+        if (maxSessions) fd.set('max_sessions', String(maxSessions));
+        var csrf = this.getCsrfToken();
+        var resp = await fetch(this.syncTriggerUrl, {
+          method: 'POST',
+          headers: {'X-CSRFToken': csrf},
+          body: fd,
+        });
+        // Server may return HTML (e.g. login redirect) on auth/CSRF failure
+        if (!resp.ok) {
+          this.error = 'Sync request failed: HTTP ' + resp.status;
+          return;
+        }
+        var ct = resp.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+          this.error = 'Sync request returned non-JSON response (HTTP ' + resp.status + ')';
+          return;
+        }
+        var data = await resp.json();
+        if (data.error) {
+          this.error = data.error;
+          return;
+        }
+        this.syncTaskId = data.task_id;
+        this.syncMessage = 'Starting sync...';
+        this.pollSyncStatus();
+      } catch (err) {
+        this.error = 'Failed to start sync: ' + err.message;
+      }
+    },
+
+    async pollSyncStatus() {
+      if (!this.syncTaskId) return;
+      try {
+        var resp = await fetch(this.syncStatusUrl + '?task_id=' + this.syncTaskId);
+        var data = await resp.json();
+        this.syncMessage = data.message || '';
+        if (data.ready) {
+          var tid = this.syncTaskId;
+          this.syncTaskId = null;
+          this.syncMessage = '';
+          if (data.successful) {
+            await this.loadCohortMetrics(true);
+          } else if (data.error) {
+            this.error = 'Sync failed: ' + data.error;
+          }
+          return;
+        }
+      } catch (err) {
+        // Keep polling on transient errors
+      }
+      this.syncPollHandle = setTimeout(() => this.pollSyncStatus(), 1500);
+    },
+
+    getCsrfToken() {
+      // CSRF_USE_SESSIONS=True in this project, so token is in the hidden form input
+      // rendered by {% csrf_token %} in the template, NOT in a cookie.
+      var input = document.querySelector('[name=csrfmiddlewaretoken]');
+      return input ? input.value : '';
+    }
+  };
+}
+</script>
+{% endblock %}
