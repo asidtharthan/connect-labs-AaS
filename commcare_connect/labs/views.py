@@ -240,9 +240,14 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "description": "Cross-opportunity admin report of all workflow runs and audit sessions",
                 "color": "purple",
             },
+            {
+                "name": "Connect Interviews",
+                "url": "/custom_analysis/interviews/",
+                "icon": "fa-microphone",
+                "description": "Interview session metrics and transcript analysis for the Interviews program",
+                "color": "indigo",
+            },
         ]
-        context["custom_analysis_projects"] = (
-            _all_custom_analysis_projects if _has_access("custom_analysis") else []
-        )
+        context["custom_analysis_projects"] = _all_custom_analysis_projects if _has_access("custom_analysis") else []
 
         return context

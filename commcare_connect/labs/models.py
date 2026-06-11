@@ -75,6 +75,12 @@ class LocalLabsRecord:
         raise NotImplementedError("LocalLabsRecord cannot be deleted. Use LabsRecordAPIClient instead.")
 
 
+# Import Connect Interviews step 1 cache models (also use app_label="labs")
+from commcare_connect.custom_analysis.interviews.pipeline.models import (  # noqa: E402, F401
+    InterviewAnswer,
+    InterviewSessionStatus,
+)
+
 # Import SQL cache models so Django can discover them for migrations
 from commcare_connect.labs.analysis.backends.sql.models import (  # noqa: E402, F401
     ComputedFLWCache,

@@ -47,6 +47,10 @@ urlpatterns = [
         "custom_analysis/exports/",
         include("commcare_connect.custom_analysis.exports.urls", namespace="exports"),
     ),
+    path(
+        "custom_analysis/interviews/",
+        include("commcare_connect.custom_analysis.interviews.urls", namespace="interviews"),
+    ),
     path("ai/", include("commcare_connect.ai.urls", namespace="ai")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
