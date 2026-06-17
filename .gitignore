@@ -378,3 +378,17 @@ docs/.dry-run/
 # Local debug/utility scripts
 scripts/
 .gstack/
+
+# Connect Interviews dashboard — participant data & generated artifacts (NEVER commit; secrets/live-pull instead)
+*_audit/
+hq_pull_full/
+_ocs_state_cache.json
+connect_user_data_snapshot.csv
+master_v7_2026-06-10.csv
+master_4src.csv
+dashboard_data.json
+payload_agg.json
+topic_status_long.csv
+docs/interviews_master_v3_render.js
+.hq_creds.json
+.ocs_creds.json

@@ -1,0 +1,60 @@
+name: Refresh Interviews Dashboard
+
+# Daily, hands-off rebuild of the Connect Interviews dashboard (workflow 3962).
+# Runs on a GitHub-hosted runner (no PC, no labs deploy): pulls HQ + OCS live, rebuilds the
+# validated master, runs the audit gate (aborts on failure), and publishes the render via the
+# connect_labs MCP HTTP endpoint.
+#
+# NO participant data is stored in git. The static Connect leg (funnel + claimed/training) is the
+# `connect_user_data_snapshot.csv` reassembled at runtime from gzip+base64 SECRETS, never committed.
+# The 10-Jun baseline + GW workbook (participant/reference) are absent here, so the audit runs its
+# integrity + self-consistency checks (those baseline/GW reference checks auto-skip).
+#
+# Required repository secrets (set them all at once with: python setup_dashboard_secrets.py):
+#   MCP_BEARER                  - connect_labs MCP token (~/.claude.json connect_labs Authorization, after "Bearer ")
+#   HQ_API_KEY, HQ_USERNAME     - CommCare HQ creds (.hq_creds.json)
+#   OCS_API_KEY                 - OpenChatStudio bearer key
+#   CONNECT_SNAP_1/2/3          - the Connect snapshot, gzip+base64, split in 3 (set by the script)
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily
+  workflow_dispatch: {} # also runnable on-demand from the Actions tab
+
+concurrency:
+  group: refresh-interviews
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
+      INTERVIEWS_CONNECT_SNAPSHOT: '1'
+      MCP_URL: 'https://labs.connect.dimagi.com/mcp/'
+      MCP_BEARER: ${{ secrets.MCP_BEARER }}
+      HQ_API_KEY: ${{ secrets.HQ_API_KEY }}
+      HQ_USERNAME: ${{ secrets.HQ_USERNAME }}
+      OCS_API_KEY: ${{ secrets.OCS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements-refresh.txt
+      - name: Reassemble Connect snapshot from secrets (never stored in git)
+        env:
+          CONNECT_SNAP_1: ${{ secrets.CONNECT_SNAP_1 }}
+          CONNECT_SNAP_2: ${{ secrets.CONNECT_SNAP_2 }}
+          CONNECT_SNAP_3: ${{ secrets.CONNECT_SNAP_3 }}
+        run: |
+          printf '%s' "${CONNECT_SNAP_1}${CONNECT_SNAP_2}${CONNECT_SNAP_3}" | base64 -d | gunzip > connect_user_data_snapshot.csv
+          echo "snapshot rows: $(wc -l < connect_user_data_snapshot.csv)"
+      - name: Refresh, audit, and publish dashboard
+        run: python refresh_interviews_dashboard.py --pull-hq --pull-ocs --push
+      - name: Clean up snapshot (don't persist participant data on the runner)
+        if: always()
+        run: rm -f connect_user_data_snapshot.csv
