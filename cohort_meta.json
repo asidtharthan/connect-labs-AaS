@@ -1,0 +1,130 @@
+{
+  "01TRS": { "completed_learn": 30, "invited": 30, "training": "2026-04-01" },
+  "02TRS": { "completed_learn": 22, "invited": 29, "training": "2026-04-02" },
+  "03TRS": { "completed_learn": 25, "invited": 27, "training": "2026-04-07" },
+  "04TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-13" },
+  "05TRS": { "completed_learn": 26, "invited": 33, "training": "2026-04-13" },
+  "06TRS": { "completed_learn": 13, "invited": 19, "training": "2026-04-14" },
+  "07TRS": { "completed_learn": 31, "invited": 32, "training": "2026-04-14" },
+  "08TRS": { "completed_learn": 32, "invited": 35, "training": "2026-04-16" },
+  "09TRE": { "completed_learn": 26, "invited": 27, "training": "2026-04-08" },
+  "10TRE": { "completed_learn": 33, "invited": 33, "training": "2026-04-14" },
+  "11TRE": { "completed_learn": 27, "invited": 32, "training": "2026-04-28" },
+  "12TRE": { "completed_learn": 31, "invited": 36, "training": "2026-04-15" },
+  "13TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-09" },
+  "14TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-10" },
+  "15TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-13" },
+  "16TRS": { "completed_learn": 32, "invited": 32, "training": "2026-04-14" },
+  "17TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-17" },
+  "18TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-16" },
+  "19TRS": { "completed_learn": 31, "invited": 39, "training": "2026-04-16" },
+  "1ABT1CA1": {
+    "completed_learn": 37,
+    "invited": 51,
+    "training": "2026-04-22"
+  },
+  "1ABT1CA2": {
+    "completed_learn": 29,
+    "invited": 48,
+    "training": "2026-04-22"
+  },
+  "1ABT1CB1": {
+    "completed_learn": 48,
+    "invited": 56,
+    "training": "2026-04-22"
+  },
+  "1ABT1CB2": {
+    "completed_learn": 55,
+    "invited": 60,
+    "training": "2026-04-22"
+  },
+  "1ABT1CB3": {
+    "completed_learn": 47,
+    "invited": 57,
+    "training": "2026-04-22"
+  },
+  "1ABT1EA1": {
+    "completed_learn": 36,
+    "invited": 49,
+    "training": "2026-04-22"
+  },
+  "1ABT1EA2": {
+    "completed_learn": 16,
+    "invited": 34,
+    "training": "2026-04-22"
+  },
+  "1ABT1EB1": {
+    "completed_learn": 44,
+    "invited": 58,
+    "training": "2026-04-22"
+  },
+  "1PC1": {
+    "completed_learn": null,
+    "invited": null,
+    "training": "2026-06-08"
+  },
+  "1PE1": {
+    "completed_learn": null,
+    "invited": null,
+    "training": "2026-06-10"
+  },
+  "20TRS": { "completed_learn": 30, "invited": 31, "training": "2026-04-17" },
+  "21TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-20" },
+  "22TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-21" },
+  "23TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-23" },
+  "24TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-24" },
+  "25TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-23" },
+  "26TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-24" },
+  "27TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-27" },
+  "28TRS": { "completed_learn": 34, "invited": 34, "training": "2026-04-28" },
+  "29TRS": { "completed_learn": 35, "invited": 35, "training": "2026-04-27" },
+  "2ABT2CB1": {
+    "completed_learn": 46,
+    "invited": 59,
+    "training": "2026-05-07"
+  },
+  "2ABT2CB2": {
+    "completed_learn": 42,
+    "invited": 60,
+    "training": "2026-05-08"
+  },
+  "2ABT2CB3": {
+    "completed_learn": 57,
+    "invited": 66,
+    "training": "2026-05-15"
+  },
+  "2ABT2EA1": {
+    "completed_learn": 29,
+    "invited": 45,
+    "training": "2026-05-08"
+  },
+  "2ABT2EA2": {
+    "completed_learn": 40,
+    "invited": 55,
+    "training": "2026-05-13"
+  },
+  "2ABT2EA3": {
+    "completed_learn": 39,
+    "invited": 63,
+    "training": "2026-05-15"
+  },
+  "30TRS": { "completed_learn": 35, "invited": 35, "training": "2026-04-28" },
+  "31TRS": { "completed_learn": 34, "invited": 33, "training": "2026-04-29" },
+  "32TRS": { "completed_learn": 35, "invited": 35, "training": "2026-04-30" },
+  "33TRS": { "completed_learn": 31, "invited": 33, "training": "2026-04-20" },
+  "34TRS": { "completed_learn": 30, "invited": 33, "training": "2026-04-21" },
+  "35TRS": { "completed_learn": 32, "invited": 33, "training": "2026-04-22" },
+  "36TRS": { "completed_learn": 30, "invited": 33, "training": "2026-04-23" },
+  "37TRS": { "completed_learn": 30, "invited": 34, "training": "2026-04-27" },
+  "38TRS": { "completed_learn": 10, "invited": 11, "training": "2026-04-27" },
+  "39TRS": { "completed_learn": 30, "invited": 33, "training": "2026-04-28" },
+  "40TRS": { "completed_learn": 31, "invited": 33, "training": "2026-04-29" },
+  "41TRS": { "completed_learn": 33, "invited": 33, "training": "2026-04-30" },
+  "42TRS": { "completed_learn": 28, "invited": 30, "training": "2026-04-29" },
+  "43TRS": { "completed_learn": 38, "invited": 43, "training": "2026-04-30" },
+  "44TRS": { "completed_learn": 15, "invited": 20, "training": "2026-05-04" },
+  "45TRS": { "completed_learn": 33, "invited": 39, "training": "2026-05-05" },
+  "46TRS": { "completed_learn": 26, "invited": 34, "training": "2026-05-06" },
+  "47TRS": { "completed_learn": 31, "invited": 35, "training": "2026-05-07" },
+  "48TRS": { "completed_learn": 20, "invited": 24, "training": "2026-05-08" }
+}

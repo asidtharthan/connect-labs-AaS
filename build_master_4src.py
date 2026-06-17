@@ -1,0 +1,349 @@
+"""Build the COMPLETE 4-source master dataset and reconcile vs master_v7_2026-06-10.csv.
+
+Sources, all interlocked on connect_id:
+  1. Connect  : <cohort>_audit/user_data.csv -> funnel flags + training_date (earliest invited_date)
+  2. CCHQ Trigger Bot : hq_pull_full/*__trigger_bot.jsonl  (V7 anchor)
+  3. CCHQ Welcome     : hq_pull_full/*__welcome_click_start.jsonl  (eligible / initiated denominators)
+  4. OCS sessions     : live API state cache (_ocs_state_cache.json)  (started/completed)
+
+Pure functions copied VERBATIM from build_dropoff_v7f.py (the canonical builder).
+Reconciles every column reproducible from live state (excludes session_human_msgs/_words,
+which need message content not on the OCS list payload). is_released uses TODAY=2026-06-10
+to match the baseline snapshot.
+"""
+import csv as _csv
+import json
+import os
+from collections import Counter, defaultdict
+from datetime import date, timedelta
+from io import StringIO
+from pathlib import Path
+
+import pandas as pd
+
+ROOT = Path(__file__).parent
+HQ_DIR = ROOT / "hq_pull_full"
+CACHE = ROOT / "_ocs_state_cache.json"
+BASELINE = ROOT / "master_v7_2026-06-10.csv"
+TODAY = date(2026, 6, 10)  # match baseline snapshot for is_released
+_csv.field_size_limit(2**30)
+
+ALL_DOMAINS = [
+    "connect-interview-cowacdi",
+    "connect-interview-eha",
+    "connect-interview-cowac-2",
+    "connect-interview-eha-2",
+]
+
+SUBGROUP_DESIGN = {
+    "TRS": {"topics": ["A", "B"], "cadence": 7},
+    "TRE": {"topics": ["A", "B", "C", "D", "E"], "cadence": 3},
+    "ABT1-A": {"topics": ["1", "2", "3", "4"], "cadence": 7},
+    "ABT1-B": {"topics": ["1", "2", "3", "4"], "cadence": 7},
+    "ABT2-A": {"topics": ["1", "2"], "cadence": 14},
+    "ABT2-B": {"topics": ["1", "2", "5", "6", "7", "8", "9", "3"], "cadence": 3},
+}
+# Authoritative map locked to master_v7_2026-06-10 (incl. the 'Prevalance' typo in C).
+TOPIC_NAMES = {
+    "A": "Community Demographics",
+    "B": "Malaria",
+    "C": "Nutrition Prevalance and Programs",
+    "D": "Water & Diarrhea",
+    "E": "Community & FLW Profile",
+    "1": "Seasonal Malaria Chemoprevention",
+    "2": "Seasonal Malaria Chemoprevention 2",
+    "3": "Bed Net Usage",
+    "4": "Health Worker Experience",
+    "5": "Family Planning",
+    "6": "Vitamin A Supplementation",
+    "7": "Vaccines",
+    "8": "Antibiotics and ACT Use",
+    "9": "Medicine Quality & Counterfeiting",
+}
+COHORT_TYPE_MAP = {
+    "TRS": "Standard",
+    "TRE": "Enhanced",
+    "ABT1-A": "ABT1 A",
+    "ABT1-B": "ABT1 B",
+    "ABT2-A": "ABT2 A",
+    "ABT2-B": "ABT2 B",
+}
+
+
+def cohort_to_sg(c):
+    if not c or c == "1A":
+        return None
+    c = str(c)
+    if "TRS" in c:
+        return "TRS"
+    if "TRE" in c:
+        return "TRE"
+    if "ABT1" in c:
+        return "ABT1-A" if "A" in c[5:] else "ABT1-B"
+    if "ABT2" in c:
+        return "ABT2-A" if "A" in c[5:] else "ABT2-B"
+
+
+def parse_dt(s):
+    if s is None or s == "" or (isinstance(s, float) and pd.isna(s)):
+        return None
+    try:
+        ts = pd.Timestamp(s)
+        return ts.tz_localize("UTC").to_pydatetime() if ts.tz is None else ts.tz_convert("UTC").to_pydatetime()
+    except Exception:
+        return None
+
+
+def clean_csv(path):
+    raw = open(path, encoding="utf-8", errors="replace").read().replace("\x00", "")
+    return list(_csv.DictReader(StringIO(raw)))
+
+
+def pick_best(sessions, after_dt, claimed):
+    avail = [s for s in sessions if s["sid"] not in claimed]
+    if not avail:
+        return None
+    after = [s for s in avail if s["first"] >= after_dt]
+    if after:
+        return min(after, key=lambda s: (0 if s["status"] == "interview_complete" else 1, s["first"]))
+    return min(avail, key=lambda s: abs((s["first"] - after_dt).total_seconds()))
+
+
+# ---------------- 1. Connect ----------------
+# Source = per-cohort <cohort>_audit/user_data.csv folders (local), OR a single committed
+# consolidated snapshot `connect_user_data_snapshot.csv` (for server/CI runs with no folders).
+# The Connect funnel + training dates are STATIC (Connect user_data can't be pulled headless),
+# so the snapshot is the frozen real Connect leg; triggers/welcome/OCS still pull live.
+SNAPSHOT = ROOT / "connect_user_data_snapshot.csv"
+
+
+def _iter_connect_sources():
+    folders = [
+        d
+        for d in sorted(os.listdir(ROOT))
+        if d.endswith("_audit") and d != "manual_audit" and (ROOT / d / "user_data.csv").exists()
+    ]
+    use_snap = bool(os.environ.get("INTERVIEWS_CONNECT_SNAPSHOT")) or (not folders and SNAPSHOT.exists())
+    if use_snap and SNAPSHOT.exists():
+        by_cohort = defaultdict(list)
+        for row in clean_csv(SNAPSHOT):
+            by_cohort[(row.get("cohort_id") or "").strip()].append(row)
+        print(f"[1] Connect: consolidated snapshot {SNAPSHOT.name} ({len(by_cohort)} cohorts)")
+        yield from by_cohort.items()
+    else:
+        for d in folders:
+            yield d.replace("_audit", ""), clean_csv(ROOT / d / "user_data.csv")
+
+
+cohort_info, cohort_flw_meta, cohort_flws = {}, {}, defaultdict(set)
+for cohort, rows in _iter_connect_sources():
+    sg = cohort_to_sg(cohort)
+    if sg is None:
+        continue
+    training_date = None
+    for row in rows:
+        inv = parse_dt(row.get("invited_date"))
+        if inv and (training_date is None or inv < training_date):
+            training_date = inv
+    cohort_info[cohort] = {"subgroup": sg, "training_date": training_date.date() if training_date else None}
+    for row in rows:
+        u = (row.get("username") or "").strip()
+        if not u:
+            continue
+        cohort_flws[cohort].add(u)
+        cohort_flw_meta[(cohort, u)] = {
+            "invited_date": parse_dt(row.get("invited_date")),
+            "accepted": (row.get("user_invite_status") or "").strip() == "accepted",
+            "learn_started": parse_dt(row.get("date_learn_started")),
+            "learn_completed": parse_dt(row.get("completed_learn_date")),
+            "date_claimed": parse_dt(row.get("date_claimed")),
+        }
+sg_unique = defaultdict(
+    lambda: {k: set() for k in ["invited", "accepted", "learn_started", "learn_completed", "claimed"]}
+)
+for cohort, info in cohort_info.items():
+    sg = info["subgroup"]
+    for u in cohort_flws[cohort]:
+        m = cohort_flw_meta[(cohort, u)]
+        if m["invited_date"]:
+            sg_unique[sg]["invited"].add(u)
+        if m["accepted"]:
+            sg_unique[sg]["accepted"].add(u)
+        if m["learn_started"]:
+            sg_unique[sg]["learn_started"].add(u)
+        if m["learn_completed"]:
+            sg_unique[sg]["learn_completed"].add(u)
+        if m["date_claimed"]:
+            sg_unique[sg]["claimed"].add(u)
+print(f"[1] Connect: {len(cohort_info)} cohorts, {sum(len(v) for v in cohort_flws.values())} FLW-rows")
+
+# ---------------- 2+3. CCHQ welcome + trigger ----------------
+welcome_flws_by_key = defaultdict(set)
+triggers_by_flw_iv = defaultdict(list)
+for domain in ALL_DOMAINS:
+    for ft in ["welcome_click_start", "trigger_bot"]:
+        path = HQ_DIR / f"{domain}__{ft}.jsonl"
+        if not path.exists():
+            continue
+        for line in path.open(encoding="utf-8"):
+            try:
+                sub = json.loads(line)
+            except Exception:
+                continue
+            form = sub.get("form", {})
+            meta = form.get("meta", {}) if isinstance(form.get("meta"), dict) else {}
+            cid = (form.get("connect_id") or meta.get("username") or sub.get("username") or "").strip()
+            recv = parse_dt(sub.get("received_on"))
+            if not cid or not recv:
+                continue
+            cohort_id = (form.get("cohort_id") or "").strip()
+            niv = (form.get("next_interview") or "").strip()
+            if not cohort_id:
+                continue
+            if ft == "welcome_click_start":
+                welcome_flws_by_key[(cohort_id, niv)].add(cid)
+            else:
+                triggers_by_flw_iv[(cid, niv)].append(
+                    {
+                        "connect_id": cid,
+                        "cohort_id": cohort_id,
+                        "next_interview": niv,
+                        "received_on": recv,
+                        "form_id": sub.get("id"),
+                    }
+                )
+for k in triggers_by_flw_iv:
+    triggers_by_flw_iv[k].sort(key=lambda tb: tb["received_on"])
+print(f"[2/3] welcome keys={len(welcome_flws_by_key)}, trigger (flw,iv) keys={len(triggers_by_flw_iv)}")
+
+# ---------------- 4. OCS live ----------------
+ocs_by_key = defaultdict(list)
+sessions = json.loads(CACHE.read_text())
+for s in sessions:
+    pid, iv = s.get("pid"), s.get("interview")
+    if not pid or not iv or str(iv).strip() == "":
+        continue
+    first = parse_dt(s.get("created_at"))
+    if not first:
+        continue
+    ocs_by_key[(pid, str(iv))].append(
+        {"sid": s["sid"], "first": first, "h": 1, "status": s.get("interview_status") or ""}
+    )
+for k in ocs_by_key:
+    ocs_by_key[k].sort(key=lambda x: x["first"])
+print(f"[4] OCS live: {len(sessions)} sessions, {len(ocs_by_key)} (pid,iv) keys")
+
+# ---------------- match ----------------
+matched = {}
+for (flw, iv), trs in triggers_by_flw_iv.items():
+    sess, claimed = ocs_by_key.get((flw, iv), []), set()
+    for tb in trs:
+        best = pick_best(sess, tb["received_on"], claimed)
+        matched[tb["form_id"]] = best
+        if best:
+            claimed.add(best["sid"])
+
+# ---------------- emit master ----------------
+rows = []
+for (flw, iv), trs in triggers_by_flw_iv.items():
+    for tb in trs:
+        cohort_id = tb["cohort_id"]
+        sg = cohort_to_sg(cohort_id)
+        if not sg or iv not in SUBGROUP_DESIGN[sg]["topics"]:
+            continue
+        n = SUBGROUP_DESIGN[sg]["topics"].index(iv) + 1
+        m = matched.get(tb["form_id"])
+        td = cohort_info.get(cohort_id, {}).get("training_date")
+        cad = SUBGROUP_DESIGN[sg]["cadence"]
+        rel = (td + timedelta(days=(n - 1) * cad)) if td else None
+        cm = cohort_flw_meta.get((cohort_id, flw), {})
+        rows.append(
+            {
+                "connect_id": flw,
+                "cohort_id": cohort_id,
+                "subgroup": sg,
+                "cohort_type": COHORT_TYPE_MAP[sg],
+                "interview_n": n,
+                "topic_code": iv,
+                "topic_name": TOPIC_NAMES.get(iv, iv),
+                "training_date": str(td) if td else "",
+                "release_date": str(rel) if rel else "",
+                "is_released": "Y" if (rel and TODAY >= rel) else "N",
+                "trigger_form_id": tb["form_id"],
+                "trigger_received_on": tb["received_on"].isoformat(),
+                "matched_session_id": m["sid"] if m else "",
+                "session_status": m["status"] if m else "",
+                "is_triggered": "Y",
+                "is_started": "Y" if m else "N",
+                "is_completed": "Y" if (m and m["status"] == "interview_complete") else "N",
+                # 4-source enrichment (Connect funnel per FLW):
+                "c_invited": "Y" if cm.get("invited_date") else "N",
+                "c_accepted": "Y" if cm.get("accepted") else "N",
+                "c_learn_completed": "Y" if cm.get("learn_completed") else "N",
+                "c_claimed": "Y" if cm.get("date_claimed") else "N",
+                "is_initiated": "Y" if flw in welcome_flws_by_key.get((cohort_id, iv), set()) else "N",
+            }
+        )
+out = ROOT / "master_4src.csv"
+with out.open("w", newline="", encoding="utf-8") as f:
+    w = _csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+    w.writeheader()
+    w.writerows(rows)
+print(f"\nwrote {out.name}: {len(rows)} rows, {len({r['connect_id'] for r in rows})} FLWs")
+
+# ---------------- reconcile vs baseline (optional; absent server-side where the participant baseline isn't shipped) ----------------
+if BASELINE.exists():
+    base = {r["trigger_form_id"]: r for r in _csv.DictReader(open(BASELINE, encoding="utf-8"))}
+    live = {r["trigger_form_id"]: r for r in rows}
+    shared = set(base) & set(live)
+    print(f"\n===== RECONCILE vs {BASELINE.name} =====")
+    print(
+        f"  rows: live={len(live)} base={len(base)} shared={len(shared)} only_live={len(set(live)-set(base))} only_base={len(set(base)-set(live))}"
+    )
+    EXACT_COLS = [
+        "cohort_id",
+        "subgroup",
+        "cohort_type",
+        "interview_n",
+        "topic_code",
+        "topic_name",
+        "training_date",
+        "release_date",
+        "is_released",
+    ]
+    col_mismatch = {c: 0 for c in EXACT_COLS}
+    for k in shared:
+        for c in EXACT_COLS:
+            if str(live[k][c]) != str(base[k][c]):
+                col_mismatch[c] += 1
+    print("  EXACT-match columns (mismatches across shared rows):")
+    for c in EXACT_COLS:
+        tag = "OK" if col_mismatch[c] == 0 else f"*** {col_mismatch[c]} MISMATCH"
+        print(f"    {c:<20} {tag}")
+    # started/completed drift (live newer)
+    st = Counter()
+    co = Counter()
+    for k in shared:
+        st[(base[k]["is_started"], live[k]["is_started"])] += 1
+        co[(base[k]["is_completed"], live[k]["is_completed"])] += 1
+    print(
+        f"  is_started (base->live): same={st[('Y','Y')]+st[('N','N')]}  N->Y={st[('N','Y')]}  Y->N(REGRESSION)={st[('Y','N')]}"
+    )
+    print(
+        f"  is_completed(base->live): same={co[('Y','Y')]+co[('N','N')]}  N->Y={co[('N','Y')]}  Y->N(REGRESSION)={co[('Y','N')]}"
+    )
+else:
+    print(f"\n===== RECONCILE: baseline {BASELINE.name} absent — skipped (server/CI) =====")
+
+# ---------------- Connect/Welcome funnel audit ----------------
+print("\n===== 4-SOURCE FUNNEL AUDIT (unique FLWs per subgroup) =====")
+print(f"  {'SG':<8} {'invited':>7} {'accept':>7} {'learnC':>7} {'claimed':>7} {'initiated(welcome-any)':>22}")
+for sg in ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"]:
+    u = sg_unique[sg]
+    init = set()
+    for (c, t), flws in welcome_flws_by_key.items():
+        if cohort_to_sg(c) == sg:
+            init |= flws
+    print(
+        f"  {sg:<8} {len(u['invited']):>7} {len(u['accepted']):>7} {len(u['learn_completed']):>7} {len(u['claimed']):>7} {len(init):>22}"
+    )
