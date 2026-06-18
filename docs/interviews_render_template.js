@@ -30,14 +30,17 @@ function WorkflowUI(props) {
   var SUBGROUP_DESIGN = {
     "TRS": ["A", "B"], "TRE": ["A", "B", "C", "D", "E"],
     "ABT1-A": ["1", "2", "3", "4"], "ABT1-B": ["1", "2", "3", "4"],
-    "ABT2-A": ["1", "2"], "ABT2-B": ["1", "2", "5", "6", "7", "8", "9", "3"]
+    "ABT2-A": ["1", "2"], "ABT2-B": ["1", "2", "5", "6", "7", "8", "9", "3"],
+    "PANEL": ["7", "1", "2", "3", "4", "5", "6", "8", "9", "10", "11"],
+    "ABT3-A": ["8", "9", "10", "11"], "ABT3-B": ["8", "9", "10", "11"]
   };
   var TOPIC_NAMES = { A: "Community Demographics", B: "Malaria", C: "Nutrition Prevalance and Programs",
     D: "Water & Diarrhea", E: "Community & FLW Profile", "1": "Seasonal Malaria Chemoprevention",
     "2": "Seasonal Malaria Chemoprevention 2", "3": "Bed Net Usage", "4": "Health Worker Experience",
     "5": "Family Planning", "6": "Vitamin A Supplementation", "7": "Vaccines",
-    "8": "Antibiotics and ACT Use", "9": "Medicine Quality & Counterfeiting" };
-  var SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"];
+    "8": "Antibiotics and ACT Use", "9": "Medicine Quality & Counterfeiting",
+    "10": "Malaria 2", "11": "Water & Diarrhea 2" };
+  var SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "PANEL", "ABT3-A", "ABT3-B"];
   // 6 states in the spec order (Notes doc): not-applicable -> completed
   var STATES = ["not-applicable", "not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
   var STATES5 = ["not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
@@ -184,6 +187,13 @@ function WorkflowUI(props) {
           <span><b>{c.started}</b> interviews started</span>
           <span><b>{c.completed}</b> completed</span>
         </div>
+        {(DATA.unmappedCohorts && DATA.unmappedCohorts.length) ? (
+          <div className="mt-3 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
+            ⚠ {DATA.unmappedCohorts.length} cohort{DATA.unmappedCohorts.length === 1 ? "" : "s"} not yet mapped
+            to a known program design (new program type?) — data is collected but hidden until a design is added:{" "}
+            <span className="font-mono">{DATA.unmappedCohorts.join(", ")}</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="bg-white rounded-lg shadow-sm">

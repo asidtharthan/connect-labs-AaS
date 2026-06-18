@@ -9,9 +9,10 @@ from datetime import date, datetime, timedelta, timezone
 import build_master_4src as bm
 
 TODAY = date.today()  # drives status time-gating; dynamic so the daily job gates against the real date
-TOPICS = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
-SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"]
-ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2"}
+TOPICS = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]
+SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "PANEL", "ABT3-A", "ABT3-B"]
+ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2",
+        "PANEL": "PANEL", "ABT3-A": "ABT3", "ABT3-B": "ABT3"}
 
 # ---- cells: unique (flw,cohort,interview_n) ----
 cell = {}
@@ -32,6 +33,16 @@ for r in bm.rows:
         c["c"] = True
 cells = list(cell.values())
 
+# ---- present subgroups (auto-load: a subgroup appears only once it has data, so PANEL/ABT3 stay
+#      hidden until their first cohort launches; SG_ORDER only fixes display order of those present) ----
+_present = {c["sg"] for c in cells}
+for _cohort, _info in bm.cohort_info.items():
+    if bm.cohort_flws.get(_cohort):
+        _present.add(_info["subgroup"])
+SG_PRESENT = [sg for sg in SG_ORDER if sg in _present]
+# topics applicable to >=1 present subgroup (hides topics 10/11 etc. until a subgroup using them is live)
+APPLICABLE = [t for t in TOPICS if any(t in bm.SUBGROUP_DESIGN[sg]["topics"] for sg in SG_PRESENT)]
+
 # ---- eligible per subgroup ----
 elig_sg = defaultdict(set)
 for (cohort, topic), flws in bm.welcome_flws_by_key.items():
@@ -51,7 +62,7 @@ for c in cells:
         f["c"].add(c["flw"])
 funnel = []
 line = {}
-for sg in SG_ORDER:
+for sg in SG_PRESENT:
     elig = len(elig_sg[sg]) or 1
     series = []
     for i, tc in enumerate(bm.SUBGROUP_DESIGN[sg]["topics"]):
@@ -103,10 +114,14 @@ def agg(keyfn, keys):
     ]
 
 
-t1 = agg(lambda c: [ROLL[c["sg"]], "Overall"], ["TRS", "TRE", "ABT1", "ABT2", "Overall"])
+# rollup keys (Table 1) and A/B keys (Table 3) follow the present subgroups, so PANEL/ABT3 fold in
+# automatically once they have data and stay absent otherwise.
+_roll_keys = list(dict.fromkeys(ROLL[sg] for sg in SG_PRESENT)) + ["Overall"]
+_abt_keys = [sg for sg in SG_PRESENT if sg.startswith(("ABT1", "ABT2", "ABT3"))] + ["Overall"]
+t1 = agg(lambda c: [ROLL[c["sg"]], "Overall"], _roll_keys)
 t3 = agg(
-    lambda c: ([c["sg"], "Overall"] if c["sg"] in ("ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B") else []),
-    ["ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "Overall"],
+    lambda c: ([c["sg"], "Overall"] if c["sg"].startswith(("ABT1", "ABT2", "ABT3")) else []),
+    _abt_keys,
 )
 # Table 2 by topic
 t2a = defaultdict(lambda: {"flw": set(), "ist": 0, "icmp": 0, "hw": 0, "hm": 0})
@@ -191,12 +206,12 @@ for cohort, info in bm.cohort_info.items():
                 sg_status[sg][st] += 1
                 topic_status_cohort[topic][cohort][st] += 1
 topic_status_out = [
-    {"code": tc, "name": bm.TOPIC_NAMES[tc], **{s: topic_status[tc][s] for s in STATES}} for tc in TOPICS
+    {"code": tc, "name": bm.TOPIC_NAMES[tc], **{s: topic_status[tc][s] for s in STATES}} for tc in APPLICABLE
 ]
 # per-cohort topic status (for the by-cohort drilldown); only the 5 applicable states (topic is in the cohort)
 STATES5 = ["completed", "started-not-completed", "available-missed-overdue", "available-not-started", "not-available-yet"]
 topic_status_cohort_out = {}
-for tc in TOPICS:
+for tc in APPLICABLE:
     rows_c = []
     for cohort in sorted(topic_status_cohort.get(tc, {})):
         d = topic_status_cohort[tc][cohort]
@@ -236,7 +251,7 @@ def _iv_blocks(topics, init_set, fget):
 
 
 dropoff_sg = []
-for sg in SG_ORDER:
+for sg in SG_PRESENT:
     u = bm.sg_unique[sg]
     claimed = u["claimed"]
     init = elig_sg.get(sg, set())
@@ -301,8 +316,9 @@ payload = {
     "topic_status_cohort": topic_status_cohort_out,
     "dropoff": dropoff,
     "states": STATES,
-    "topics": TOPICS,
-    "sg_order": SG_ORDER,
+    "topics": APPLICABLE,
+    "sg_order": SG_PRESENT,
+    "unmapped_cohorts": sorted(bm.unmapped_cohorts),
 }
 out = json.dumps(payload, separators=(",", ":"))
 open("payload_agg.json", "w", encoding="utf-8").write(out)

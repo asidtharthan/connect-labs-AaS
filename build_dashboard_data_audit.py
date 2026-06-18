@@ -7,7 +7,6 @@ from collections import defaultdict
 
 import build_master_4src as bm
 
-SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"]
 STATES_NA = [
     "completed",
     "started-not-completed",
@@ -18,6 +17,7 @@ STATES_NA = [
 
 dd = json.loads(open("dashboard_data.json", encoding="utf-8").read())
 pay = json.loads(open("payload_agg.json", encoding="utf-8").read())
+SG_ORDER = pay["sg_order"]  # present subgroups (auto-load); checks run over exactly what was emitted
 
 results = []
 
@@ -36,7 +36,8 @@ chk("table2 identical", dd["table2"] == pay["table2"])
 chk("table3 identical", dd["table3"] == pay["table3"])
 
 # avg_words: independent recompute = Σ session_human_words / Σ session_human_msgs over STARTED rows
-_ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2"}
+_ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2",
+         "PANEL": "PANEL", "ABT3-A": "ABT3", "ABT3-B": "ABT3"}
 
 
 def _avg(pred):
@@ -48,7 +49,7 @@ def _avg(pred):
     return round(hw / hm, 1) if hm else None
 
 
-_abt = ("ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B")
+_abt = ("ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "ABT3-A", "ABT3-B")
 aw_bad = 0
 for r in dd["table1"]:
     exp = _avg((lambda x: True)) if r["key"] == "Overall" else _avg(lambda x, k=r["key"]: _ROLL[x["subgroup"]] == k)

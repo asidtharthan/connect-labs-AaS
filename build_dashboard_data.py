@@ -8,7 +8,6 @@ from collections import defaultdict
 
 import build_master_4src as bm
 
-SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"]
 STATES_NA = [
     "completed",
     "started-not-completed",
@@ -19,6 +18,9 @@ STATES_NA = [
 
 payload = json.loads(open("payload_agg.json", encoding="utf-8").read())
 cohort_meta = json.loads(open("cohort_meta.json", encoding="utf-8").read())
+# Present subgroups (in display order) come from the payload — auto-load: PANEL/ABT3 fold in only
+# once they have data, so connectFunnel/lineSeries follow the same set the funnel/dropoff used.
+SG_ORDER = payload["sg_order"]
 
 # ---- initiated per subgroup (welcome union) ----
 elig_sg = defaultdict(set)
@@ -133,6 +135,7 @@ out = {
     "dropoff": payload["dropoff"],
     "granular": granular,
     "granular_total": len(bm.rows),
+    "unmappedCohorts": payload.get("unmapped_cohorts", []),
 }
 s = json.dumps(out, separators=(",", ":"))
 open("dashboard_data.json", "w", encoding="utf-8").write(s)
