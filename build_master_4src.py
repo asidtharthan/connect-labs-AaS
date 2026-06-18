@@ -24,8 +24,9 @@ import pandas as pd
 ROOT = Path(__file__).parent
 HQ_DIR = ROOT / "hq_pull_full"
 CACHE = ROOT / "_ocs_state_cache.json"
+WORDS_CACHE = ROOT / "_ocs_words_cache.json"  # {sid: {human_words, human_msgs}} from pull_ocs_words.py
 BASELINE = ROOT / "master_v7_2026-06-10.csv"
-TODAY = date(2026, 6, 10)  # match baseline snapshot for is_released
+TODAY = date.today()  # dynamic: is_released / time-gating reflect the real run date
 _csv.field_size_limit(2**30)
 
 ALL_DOMAINS = [
@@ -177,11 +178,12 @@ for cohort, info in cohort_info.items():
             sg_unique[sg]["claimed"].add(u)
 print(f"[1] Connect: {len(cohort_info)} cohorts, {sum(len(v) for v in cohort_flws.values())} FLW-rows")
 
-# ---------------- 2+3. CCHQ welcome + trigger ----------------
+# ---------------- 2+3. CCHQ welcome + trigger + flw_registration ----------------
 welcome_flws_by_key = defaultdict(set)
 triggers_by_flw_iv = defaultdict(list)
+flw_registered = set()  # connect_ids that submitted an HQ FLW-registration form (for "FLW Reg (HQ)" funnel column)
 for domain in ALL_DOMAINS:
-    for ft in ["welcome_click_start", "trigger_bot"]:
+    for ft in ["welcome_click_start", "trigger_bot", "flw_registration"]:
         path = HQ_DIR / f"{domain}__{ft}.jsonl"
         if not path.exists():
             continue
@@ -193,6 +195,10 @@ for domain in ALL_DOMAINS:
             form = sub.get("form", {})
             meta = form.get("meta", {}) if isinstance(form.get("meta"), dict) else {}
             cid = (form.get("connect_id") or meta.get("username") or sub.get("username") or "").strip()
+            if ft == "flw_registration":
+                if cid:
+                    flw_registered.add(cid)
+                continue
             recv = parse_dt(sub.get("received_on"))
             if not cid or not recv:
                 continue
@@ -233,6 +239,10 @@ for k in ocs_by_key:
     ocs_by_key[k].sort(key=lambda x: x["first"])
 print(f"[4] OCS live: {len(sessions)} sessions, {len(ocs_by_key)} (pid,iv) keys")
 
+# ---------------- OCS message word counts (per session; from pull_ocs_words.py) ----------------
+words = json.loads(WORDS_CACHE.read_text()) if WORDS_CACHE.exists() else {}
+print(f"[4b] OCS words cache: {len(words)} sessions")
+
 # ---------------- match ----------------
 matched = {}
 for (flw, iv), trs in triggers_by_flw_iv.items():
@@ -257,6 +267,7 @@ for (flw, iv), trs in triggers_by_flw_iv.items():
         cad = SUBGROUP_DESIGN[sg]["cadence"]
         rel = (td + timedelta(days=(n - 1) * cad)) if td else None
         cm = cohort_flw_meta.get((cohort_id, flw), {})
+        sw = words.get(m["sid"], {}) if m else {}
         rows.append(
             {
                 "connect_id": flw,
@@ -273,6 +284,8 @@ for (flw, iv), trs in triggers_by_flw_iv.items():
                 "trigger_received_on": tb["received_on"].isoformat(),
                 "matched_session_id": m["sid"] if m else "",
                 "session_status": m["status"] if m else "",
+                "session_human_words": sw.get("human_words", 0) if m else 0,
+                "session_human_msgs": sw.get("human_msgs", 0) if m else 0,
                 "is_triggered": "Y",
                 "is_started": "Y" if m else "N",
                 "is_completed": "Y" if (m and m["status"] == "interview_complete") else "N",

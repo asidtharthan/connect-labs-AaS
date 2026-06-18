@@ -212,6 +212,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pull-hq", action="store_true", help="live-pull CommCare HQ forms (API key)")
     ap.add_argument("--pull-ocs", action="store_true", help="live-pull OCS sessions (bearer key)")
+    ap.add_argument("--pull-words", action="store_true", help="live-pull OCS message word counts (avg-words metric)")
     ap.add_argument("--pull-connect", action="store_true", help="live-pull Connect user_data (needs PAT)")
     ap.add_argument("--push", action="store_true", help="push refreshed render to workflow 3962 (needs PAT)")
     args = ap.parse_args()
@@ -227,6 +228,10 @@ def main():
         run("2. pull OCS sessions", [PY, "pull_ocs_state.py"])
     else:
         print("\n=== 2. pull OCS: skipped (using existing _ocs_state_cache.json) ===", flush=True)
+    if args.pull_words:
+        run("2b. pull OCS message word counts", [PY, "pull_ocs_words.py"])
+    else:
+        print("\n=== 2b. pull words: skipped (using existing _ocs_words_cache.json) ===", flush=True)
     if args.pull_connect:
         run("3. pull Connect user_data", [PY, "fetch_all_cohorts.py"])
     else:

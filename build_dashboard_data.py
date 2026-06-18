@@ -59,12 +59,20 @@ line_series = []
 for sg in SG_ORDER:
     line_series.append({"sg": sg, "base": len(elig_sg.get(sg, set())), "pts": payload["line_pct_started"].get(sg, [])})
 
-# ---- topicStatus reshaped (5 states + applicable) ----
+# ---- topicStatus reshaped: all 6 states (incl not-applicable) + total (for %-stack to 100) ----
+ORDER6 = [
+    "not-applicable",
+    "not-available-yet",
+    "available-not-started",
+    "available-missed-overdue",
+    "started-not-completed",
+    "completed",
+]
 topic_status = []
 for t in payload["topic_status"]:
-    applicable = sum(t[s] for s in STATES_NA)
-    row = {"code": t["code"], "name": t["name"], "applicable": applicable}
-    for s in STATES_NA:
+    total = sum(t[s] for s in ORDER6)
+    row = {"code": t["code"], "name": t["name"], "total": total, "applicable": total - t["not-applicable"]}
+    for s in ORDER6:
         row[s] = t[s]
     topic_status.append(row)
 
@@ -121,6 +129,8 @@ out = {
     "table2": payload["table2"],
     "table3": payload["table3"],
     "topicStatus": topic_status,
+    "topicStatusCohort": payload["topic_status_cohort"],
+    "dropoff": payload["dropoff"],
     "granular": granular,
     "granular_total": len(bm.rows),
 }

@@ -16,6 +16,14 @@ function WorkflowUI(props) {
   var tableSub = tsub[0], setTableSub = tsub[1];
   var bsub = React.useState("subgroup");
   var bdSub = bsub[0], setBdSub = bsub[1];
+  var fex = React.useState({});
+  var funExp = fex[0], setFunExp = fex[1];   // expanded subgroups in the drop-off matrix
+  var tex = React.useState({});
+  var topicExp = tex[0], setTopicExp = tex[1];   // expanded topics in topic-completion drilldown
+  var gss = React.useState("");
+  var gSearch = gss[0], setGSearch = gss[1];   // granular session search box
+  var gpp = React.useState(0);
+  var gPage = gpp[0], setGPage = gpp[1];   // granular page
   var lineRef = React.useRef(null), lineInst = React.useRef(null);
   var barRef = React.useRef(null), barInst = React.useRef(null);
 
@@ -30,12 +38,31 @@ function WorkflowUI(props) {
     "5": "Family Planning", "6": "Vitamin A Supplementation", "7": "Vaccines",
     "8": "Antibiotics and ACT Use", "9": "Medicine Quality & Counterfeiting" };
   var SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"];
-  var STATES = ["completed", "started-not-completed", "available-missed-overdue", "available-not-started", "not-available-yet"];
-  var STATE_LABEL = { "completed": "Completed", "started-not-completed": "Started, not completed",
-    "available-missed-overdue": "Overdue / missed", "available-not-started": "Available, not started",
-    "not-available-yet": "Not available yet" };
-  var STATE_COLOR = { "completed": "#16a34a", "started-not-completed": "#84cc16",
-    "available-missed-overdue": "#ef4444", "available-not-started": "#f59e0b", "not-available-yet": "#cbd5e1" };
+  // 6 states in the spec order (Notes doc): not-applicable -> completed
+  var STATES = ["not-applicable", "not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
+  var STATES5 = ["not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
+  var STATE_LABEL = { "not-applicable": "Not applicable", "not-available-yet": "Not available yet",
+    "available-not-started": "Available, not started", "available-missed-overdue": "Available, missed/overdue",
+    "started-not-completed": "Started, not completed", "completed": "Completed" };
+  var STATE_COLOR = { "not-applicable": "#e5e7eb", "not-available-yet": "#cbd5e1",
+    "available-not-started": "#f59e0b", "available-missed-overdue": "#ef4444",
+    "started-not-completed": "#84cc16", "completed": "#16a34a" };
+  var STATE_DEF = {
+    "not-applicable": "topic isn't part of this cohort's design",
+    "not-available-yet": "in the cohort, but not yet released per today's date, the topic's place in the schedule, and the cohort's training date",
+    "available-not-started": "available for the FLW to trigger from the app, but not yet started",
+    "available-missed-overdue": "the FLW missed this topic's window — the next topic is already available",
+    "started-not-completed": "FLW responded with ≥1 message but did not complete the session",
+    "completed": "FLW completed the interview",
+  };
+  function Legend(props2) {
+    return (
+      <details className="text-xs text-gray-600 bg-gray-50 rounded border border-gray-200 px-3 py-2">
+        <summary className="cursor-pointer font-medium text-gray-700">{props2.title}</summary>
+        <div className="mt-2 space-y-1">{props2.children}</div>
+      </details>
+    );
+  }
   var SG_COLOR = { "TRS": "#6366f1", "TRE": "#0ea5e9", "ABT1-A": "#f59e0b", "ABT1-B": "#ef4444", "ABT2-A": "#10b981", "ABT2-B": "#8b5cf6" };
 
   var th = "px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider";
@@ -71,10 +98,13 @@ function WorkflowUI(props) {
       type: "bar",
       data: { labels: DATA.topicStatus.map(function (t) { return t.code + " · " + (TOPIC_NAMES[t.code] || t.code); }),
         datasets: STATES.map(function (st) {
-          return { label: STATE_LABEL[st], data: DATA.topicStatus.map(function (t) { return t[st]; }), backgroundColor: STATE_COLOR[st] }; }) },
+          return { label: STATE_LABEL[st],
+            data: DATA.topicStatus.map(function (t) { return t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0; }),
+            backgroundColor: STATE_COLOR[st] }; }) },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
-        plugins: { title: { display: true, text: "FLW status distribution by topic (claimed FLWs, time-gated)" }, legend: { position: "bottom" } },
-        scales: { x: { stacked: true, title: { display: true, text: "FLWs" } }, y: { stacked: true } } }
+        plugins: { title: { display: true, text: "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom" },
+          tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + "%"; } } } },
+        scales: { x: { stacked: true, max: 100, title: { display: true, text: "% of claimed FLWs" } }, y: { stacked: true } } }
     });
     return function () { if (barInst.current) { barInst.current.destroy(); barInst.current = null; } };
   }, [activeTab, tableSub]);
@@ -89,15 +119,58 @@ function WorkflowUI(props) {
     );
   }
 
+  function ivRow(key, label, iv, indent) {
+    return (
+      <tr key={key} className="hover:bg-gray-50">
+        <td className={td + " " + indent + " text-gray-500"}>{label}</td>
+        <td className={td}>{iv.name}</td>
+        <td className={td + " text-right"}>{iv.eligible}</td>
+        <td className={td + " text-right"}>{iv.triggered}</td>
+        <td className={td + " text-right text-gray-500"}>{iv.pct_trig}%</td>
+        <td className={td + " text-right"}>{iv.started}</td>
+        <td className={td + " text-right text-gray-500"}>{iv.pct_started}%</td>
+        <td className={td + " text-right text-green-700 font-medium"}>{iv.completed}</td>
+        <td className={td + " text-right text-gray-500"}>{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</td>
+      </tr>
+    );
+  }
+
   var c = DATA.counts;
+  var maxIv = Math.max.apply(null, (DATA.dropoff.subgroups || []).map(function (s) { return s.interviews.length; }));
+
+  // ---- Granular: ALL live OCS sessions (from the pipeline prop, not embedded) + client-side search/paging ----
+  function liveRows(alias) { var p = props.pipelines; return (p && p[alias] && p[alias].rows) || []; }
+  var ocsLive = liveRows("sessions");
+  var sessSource = ocsLive.length
+    ? ocsLive.map(function (r) {
+        var iv = r.interview, stt = r.interview_status || "";
+        return {
+          connect_id: r.connect_id || r.username || "", interview: (iv == null || iv === "") ? "" : String(iv),
+          started: !!(iv != null && iv !== ""), completed: stt === "interview_complete",
+          created_at: (r.created_at || "").slice(0, 10), session_id: r.id || r.matched_session_id || "",
+        };
+      })
+    : DATA.granular.map(function (r) {
+        return { connect_id: r.connect_id, interview: r.topic_code, started: r.is_started,
+          completed: r.is_completed, created_at: "", session_id: r.session_id };
+      });
+  var gq = gSearch.trim().toLowerCase();
+  var sessFiltered = gq
+    ? sessSource.filter(function (r) {
+        return (r.connect_id + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) >= 0;
+      })
+    : sessSource;
+  var GPAGE = 100;
+  var gPages = Math.max(1, Math.ceil(sessFiltered.length / GPAGE));
+  var gPageC = Math.min(gPage, gPages - 1);
+  var sessPageRows = sessFiltered.slice(gPageC * GPAGE, gPageC * GPAGE + GPAGE);
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm p-5">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Connect Interviews — Master Dataset</h1>
-            <p className="text-gray-600 mt-1">One row per FLW × interview, interlocking Connect · CCHQ Trigger · CCHQ Welcome · OCS session. All {c.cohorts} cohorts.</p>
-            <p className="text-xs text-gray-400 mt-1">Validated snapshot (audit_e2e 26/26 + dashboard audit 18/18){DATA.today ? " · data as of " + DATA.today : ""}.</p>
+            <h1 className="text-2xl font-bold text-gray-900">Connect Interviews Labs Dashboard</h1>
+            <p className="text-xs text-gray-400 mt-1">Last refreshed: {DATA.built_at || DATA.today || "—"}</p>
           </div>
           <button onClick={function () { window.location.reload(); }} title="Reload the dashboard"
             className="shrink-0 inline-flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
@@ -140,6 +213,39 @@ function WorkflowUI(props) {
                   </div>
                 );
               })}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Completed interviews by round (unique FLWs per subgroup)</h3>
+              <p className="text-xs text-gray-400 mb-2"># FLWs who completed each interview number — completion beyond the 1st interview, not just the first.</p>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50"><tr>
+                    <th className={th + " text-left"}>Subgroup</th>
+                    {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                      return <th key={i} className={th + " text-right"}>Int {i + 1}</th>;
+                    })}
+                  </tr></thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {DATA.dropoff.subgroups.map(function (s) {
+                      var byN = {};
+                      s.interviews.forEach(function (iv) { byN[iv.n] = iv; });
+                      return (
+                        <tr key={s.sg} className="hover:bg-gray-50">
+                          <td className={td + " font-medium"}>{s.sg}</td>
+                          {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                            var iv = byN[i + 1];
+                            return (
+                              <td key={i} className={td + " text-right" + (iv && iv.completed ? " text-green-700 font-medium" : " text-gray-300")}>
+                                {iv ? iv.completed : "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Connect funnel by subgroup</h3>
@@ -186,57 +292,98 @@ function WorkflowUI(props) {
             </div>
 
             {tableSub === "granular" && (
-              <div className="overflow-x-auto" style={{ maxHeight: "70vh" }}>
-                <p className="text-xs text-gray-400 px-1 py-1">Showing {DATA.granular.length} of {DATA.granular_total} master rows (validated sample, sorted by cohort).</p>
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0"><tr>
-                    {["connect_id", "cohort", "sg", "int", "topic", "trig", "init", "started", "completed", "session"].map(function (h) {
-                      return <th key={h} className={th + " text-left"}>{h}</th>;
-                    })}
-                  </tr></thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {DATA.granular.map(function (r, idx) {
-                      function yn(v) { return <span className={v ? "text-green-600 font-bold" : "text-gray-300"}>{v ? "Y" : "N"}</span>; }
-                      return (
-                        <tr key={idx} className="hover:bg-gray-50">
-                          <td className={td + " font-mono text-xs"}>{r.connect_id}</td>
-                          <td className={td}>{r.cohort_id}</td><td className={td}>{r.subgroup}</td>
-                          <td className={td}>{r.interview_n}</td><td className={td}>{r.topic_code}</td>
-                          <td className={td + " text-center"}>{yn(r.is_triggered)}</td>
-                          <td className={td + " text-center"}>{yn(r.is_initiated)}</td>
-                          <td className={td + " text-center"}>{yn(r.is_started)}</td>
-                          <td className={td + " text-center"}>{yn(r.is_completed)}</td>
-                          <td className={td + " font-mono text-xs"}>{r.session_id ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + r.session_id + "/view/"} target="_blank" rel="noopener noreferrer" title={r.session_id} className="text-indigo-600 hover:underline">{String(r.session_id).slice(0, 8)}↗</a> : ""}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div>
+                <div className="flex items-center gap-2 px-1 py-2">
+                  <input type="text" value={gSearch} placeholder="Search connect_id / session / interview / status…"
+                    onChange={function (e) { setGSearch(e.target.value); setGPage(0); }}
+                    className="border border-gray-300 rounded-md px-3 py-1.5 text-sm" style={{ width: "24rem" }} />
+                  <span className="text-xs text-gray-500">
+                    {sessFiltered.length} sessions{ocsLive.length ? " (live OCS)" : " (embedded sample — live pipeline not loaded)"}{gq ? " matching" : ""}
+                  </span>
+                </div>
+                <div className="overflow-x-auto" style={{ maxHeight: "65vh" }}>
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0"><tr>
+                      {["connect_id", "interview", "status", "created", "session"].map(function (h) {
+                        return <th key={h} className={th + " text-left"}>{h}</th>;
+                      })}
+                    </tr></thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {sessPageRows.map(function (r, idx) {
+                        var label = r.completed ? "Completed" : (r.started ? "Started" : "—");
+                        var cls = r.completed ? "text-green-700 font-medium" : (r.started ? "text-lime-700" : "text-gray-400");
+                        return (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className={td + " font-mono text-xs"}>{r.connect_id}</td>
+                            <td className={td}>{r.interview || "—"}</td>
+                            <td className={td + " " + cls}>{label}</td>
+                            <td className={td + " text-gray-500"}>{r.created_at || "—"}</td>
+                            <td className={td + " font-mono text-xs"}>{r.session_id ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + r.session_id + "/view/"} target="_blank" rel="noopener noreferrer" title={r.session_id} className="text-indigo-600 hover:underline">view ↗</a> : ""}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center gap-3 px-1 py-2 text-sm">
+                  <button onClick={function () { setGPage(Math.max(0, gPageC - 1)); }} disabled={gPageC <= 0}
+                    className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40">‹ Prev</button>
+                  <span className="text-gray-500">Page {gPageC + 1} / {gPages}</span>
+                  <button onClick={function () { setGPage(Math.min(gPages - 1, gPageC + 1)); }} disabled={gPageC >= gPages - 1}
+                    className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40">Next ›</button>
+                </div>
               </div>
             )}
 
             {tableSub === "topiccomplete" && (
               <div className="space-y-4">
-                <p className="text-xs text-gray-400 px-1">FLW status per topic across claimed FLWs. Time-gating uses cohort training date + subgroup cadence.</p>
+                <p className="text-xs text-gray-400 px-1">Per-FLW status by topic, across all claimed FLWs (each topic stacks to 100%). Click a topic to break it down by cohort.</p>
+                <Legend title="Status definitions (in chart order)">
+                  {STATES.map(function (s) {
+                    return (
+                      <div key={s} className="flex items-start gap-2">
+                        <span style={{ display: "inline-block", width: 11, height: 11, background: STATE_COLOR[s], borderRadius: 2, marginTop: 3, flexShrink: 0 }}></span>
+                        <span><b>{STATE_LABEL[s]}:</b> {STATE_DEF[s]}</span>
+                      </div>
+                    );
+                  })}
+                </Legend>
                 <div style={{ height: "420px" }}><canvas ref={barRef}></canvas></div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50"><tr>
                       <th className={th + " text-left"}>Topic</th>
-                      <th className={th + " text-right"}>Applicable</th>
                       {STATES.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
-                      <th className={th + " text-right"}>% Completed</th>
                     </tr></thead>
                     <tbody className="bg-white divide-y divide-gray-100">
                       {DATA.topicStatus.map(function (t) {
-                        return (
-                          <tr key={t.code} className="hover:bg-gray-50">
-                            <td className={td + " font-medium"}>{t.code} · {TOPIC_NAMES[t.code] || t.code}</td>
-                            <td className={td + " text-right"}>{t.applicable}</td>
-                            {STATES.map(function (s) { return <td key={s} className={td + " text-right"}>{t[s]}</td>; })}
-                            <td className={td + " text-right text-gray-500"}>{t.applicable ? Math.round(100 * t.completed / t.applicable) + "%" : "—"}</td>
+                        var open = !!topicExp[t.code];
+                        var has = (DATA.topicStatusCohort[t.code] || []).length > 0;
+                        function p(s, tot) { return tot ? Math.round(1000 * s / tot) / 10 + "%" : "—"; }
+                        var rows = [];
+                        rows.push(
+                          <tr key={t.code} className={"hover:bg-gray-50 " + (has ? "cursor-pointer" : "")}
+                            onClick={has ? function () { var n = Object.assign({}, topicExp); n[t.code] = !open; setTopicExp(n); } : null}>
+                            <td className={td + " font-medium"}>{has ? (open ? "▾ " : "▸ ") : ""}{t.code} · {TOPIC_NAMES[t.code] || t.code}</td>
+                            {STATES.map(function (s) {
+                              return <td key={s} className={td + " text-right" + (s === "completed" ? " text-green-700 font-medium" : " text-gray-600")}>{p(t[s], t.total)}</td>;
+                            })}
                           </tr>
                         );
+                        if (open) {
+                          (DATA.topicStatusCohort[t.code] || []).forEach(function (rc) {
+                            rows.push(
+                              <tr key={t.code + "-" + rc.cohort} className="bg-gray-50">
+                                <td className={td + " pl-6 text-gray-600"}>{rc.cohort} <span className="text-gray-400">(n={rc.total})</span></td>
+                                <td className={td + " text-right text-gray-300"}>—</td>
+                                {STATES5.map(function (s) {
+                                  return <td key={s} className={td + " text-right" + (s === "completed" ? " text-green-700" : " text-gray-500")}>{p(rc[s], rc.total)}</td>;
+                                })}
+                              </tr>
+                            );
+                          });
+                        }
+                        return rows;
                       })}
                     </tbody>
                   </table>
@@ -249,29 +396,75 @@ function WorkflowUI(props) {
         {activeTab === "funnels" && (
           <div className="p-3 space-y-4">
             <div style={{ height: "380px" }}><canvas ref={lineRef}></canvas></div>
+
+            <Legend title="What these columns mean">
+              <div><b>Connect funnel:</b> Invited → Accepted → Started/Completed Learn → Claimed (downloaded the app) → FLW Reg (HQ) (registered in CommCare HQ) → # Initiated (clicked any Welcome/start form).</div>
+              <div><b>Eligible</b> = # FLWs initiated (constant per group — the retention base). <b>Triggered</b> = the bot prompted that interview. <b>Started</b> = an OCS session exists. <b>Completed</b> = session reached interview_complete.</div>
+              <div><b>% Started</b> = Started ÷ Eligible · <b>% Triggered</b> = Triggered ÷ Eligible · <b>% Completed</b> = Completed ÷ Started.</div>
+            </Legend>
+
             <div className="overflow-x-auto">
+              <h3 className="text-sm font-semibold text-gray-700 px-1 py-1">Connect funnel by subgroup</h3>
+              <p className="text-xs text-gray-400 px-1">Invited → Accepted → Started/Completed Learn → Claimed → FLW registered (HQ) → # Initiated (any Welcome form). From Connect user_data (static snapshot) + HQ.</p>
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50"><tr>
-                  <th className={th + " text-left"}>Subgroup</th><th className={th + " text-left"}>Int</th>
-                  <th className={th + " text-left"}>Topic</th><th className={th + " text-right"}>Eligible</th>
-                  <th className={th + " text-right"}>Triggered</th><th className={th + " text-right"}>Started</th>
-                  <th className={th + " text-right"}>Completed</th><th className={th + " text-right"}>% Started</th>
+                  {["Subgroup", "Invited", "Accepted", "Started Learn", "Completed Learn", "Claimed", "FLW Reg (HQ)", "# Initiated"].map(function (h, i) {
+                    return <th key={h} className={th + (i === 0 ? " text-left" : " text-right")}>{h}</th>;
+                  })}
+                </tr></thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {DATA.dropoff.subgroups.map(function (s) {
+                    var c = s.connect;
+                    return (
+                      <tr key={s.sg} className="hover:bg-gray-50">
+                        <td className={td + " font-medium"}>{s.sg} <span className="text-gray-400">({s.cohorts_n})</span></td>
+                        <td className={td + " text-right"}>{c.invited}</td>
+                        <td className={td + " text-right"}>{c.accepted}</td>
+                        <td className={td + " text-right"}>{c.learn_started}</td>
+                        <td className={td + " text-right"}>{c.learn_completed}</td>
+                        <td className={td + " text-right"}>{c.claimed}</td>
+                        <td className={td + " text-right"}>{c.flw_reg}</td>
+                        <td className={td + " text-right font-medium"}>{c.initiated}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-x-auto">
+              <h3 className="text-sm font-semibold text-gray-700 px-1 py-1">Interview drop-off — by interview, all topics</h3>
+              <p className="text-xs text-gray-400 px-1">Retention rates: Eligible = # FLWs initiated (constant per group); % Started = Started ÷ Eligible; % Completed = Completed ÷ Started. Click a subgroup to expand its cohorts.</p>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50"><tr>
+                  <th className={th + " text-left"}>Group / Int</th><th className={th + " text-left"}>Topic</th>
+                  <th className={th + " text-right"}>Eligible</th><th className={th + " text-right"}>Triggered</th>
+                  <th className={th + " text-right"}>% Trig</th><th className={th + " text-right"}>Started</th>
+                  <th className={th + " text-right"}>% Started</th><th className={th + " text-right"}>Completed</th>
                   <th className={th + " text-right"}>% Completed</th>
                 </tr></thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {DATA.funnel.map(function (f) {
-                    return (
-                      <tr key={f.sg + f.n} className="hover:bg-gray-50">
-                        <td className={td + " font-medium"}>{f.sg}</td><td className={td}>{f.n}</td>
-                        <td className={td}>{f.name}</td>
-                        <td className={td + " text-right"}>{f.elig}</td>
-                        <td className={td + " text-right"}>{f.trig}</td>
-                        <td className={td + " text-right"}>{f.started}</td>
-                        <td className={td + " text-right text-green-700 font-medium"}>{f.completed}</td>
-                        <td className={td + " text-right text-gray-500"}>{f.pct_started == null ? "—" : f.pct_started + "%"}</td>
-                        <td className={td + " text-right text-gray-500"}>{f.pct_completed == null ? "—" : f.pct_completed + "%"}</td>
+                  {DATA.dropoff.subgroups.map(function (s) {
+                    var open = !!funExp[s.sg];
+                    var rows = [];
+                    rows.push(
+                      <tr key={s.sg + "-h"} className="bg-indigo-50 cursor-pointer"
+                        onClick={function () { var n = Object.assign({}, funExp); n[s.sg] = !open; setFunExp(n); }}>
+                        <td className={td + " font-bold text-indigo-800"} colSpan={9}>{open ? "▾" : "▸"} {s.sg} — {(DATA.dropoff.cohorts[s.sg] || []).length} cohorts</td>
                       </tr>
                     );
+                    s.interviews.forEach(function (iv) { rows.push(ivRow(s.sg + "-" + iv.n, "Int " + iv.n, iv, "")); });
+                    if (open) {
+                      (DATA.dropoff.cohorts[s.sg] || []).forEach(function (co) {
+                        rows.push(
+                          <tr key={s.sg + "-" + co.cohort + "-h"} className="bg-gray-50">
+                            <td className={td + " pl-6 font-medium text-gray-600"} colSpan={9}>{co.cohort}</td>
+                          </tr>
+                        );
+                        co.interviews.forEach(function (iv) { rows.push(ivRow(co.cohort + "-" + iv.n, "Int " + iv.n, iv, "pl-8")); });
+                      });
+                    }
+                    return rows;
                   })}
                 </tbody>
               </table>
@@ -281,6 +474,12 @@ function WorkflowUI(props) {
 
         {activeTab === "breakdowns" && (
           <div className="p-3 space-y-3">
+            <Legend title="Metric definitions">
+              <div><b>FLWs Started:</b> unique FLWs who started ≥1 interview in the group.</div>
+              <div><b>Interviews Started / Completed:</b> count of started / completed interviews (an FLW can have several).</div>
+              <div><b>% Completed:</b> Interviews Completed ÷ Interviews Started.</div>
+              <div><b>Avg words / FLW msg:</b> total FLW-message words ÷ total FLW messages, over started sessions (whitespace word count).</div>
+            </Legend>
             <div className="flex gap-2">
               {subBtn(bdSub, "subgroup", setBdSub, "By Subgroup")}
               {subBtn(bdSub, "topic", setBdSub, "By Topic")}
@@ -294,7 +493,7 @@ function WorkflowUI(props) {
                   <thead className="bg-gray-50"><tr>
                     <th className={th + " text-left"}>Subgroup</th><th className={th + " text-right"}>FLWs Started</th>
                     <th className={th + " text-right"}>Interviews Started</th><th className={th + " text-right"}>Completed</th>
-                    <th className={th + " text-right"}>% Completed</th>
+                    <th className={th + " text-right"}>% Completed</th><th className={th + " text-right"}>Avg words / FLW msg</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {DATA.table1.map(function (r) {
@@ -305,6 +504,7 @@ function WorkflowUI(props) {
                           <td className={td + " text-right"}>{r.flws}</td><td className={td + " text-right"}>{r.ist}</td>
                           <td className={td + " text-right text-green-700 font-medium"}>{r.icmp}</td>
                           <td className={td + " text-right text-gray-500"}>{pctTxt(r.pct)}</td>
+                          <td className={td + " text-right text-gray-500"}>{r.avg_words == null ? "—" : r.avg_words}</td>
                         </tr>
                       );
                     })}
@@ -321,6 +521,7 @@ function WorkflowUI(props) {
                     <th className={th + " text-left"}>Topic</th><th className={th + " text-left"}>Name</th>
                     <th className={th + " text-right"}>FLWs Started</th><th className={th + " text-right"}>Interviews Started</th>
                     <th className={th + " text-right"}>Completed</th><th className={th + " text-right"}>% Completed</th>
+                    <th className={th + " text-right"}>Avg words / FLW msg</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {DATA.table2.map(function (r) {
@@ -330,6 +531,7 @@ function WorkflowUI(props) {
                           <td className={td + " text-right"}>{r.flws}</td><td className={td + " text-right"}>{r.ist}</td>
                           <td className={td + " text-right text-green-700 font-medium"}>{r.icmp}</td>
                           <td className={td + " text-right text-gray-500"}>{pctTxt(r.pct)}</td>
+                          <td className={td + " text-right text-gray-500"}>{r.avg_words == null ? "—" : r.avg_words}</td>
                         </tr>
                       );
                     })}
@@ -345,7 +547,7 @@ function WorkflowUI(props) {
                   <thead className="bg-gray-50"><tr>
                     <th className={th + " text-left"}>Arm</th><th className={th + " text-right"}>FLWs Started</th>
                     <th className={th + " text-right"}>Interviews Started</th><th className={th + " text-right"}>Completed</th>
-                    <th className={th + " text-right"}>% Completed</th>
+                    <th className={th + " text-right"}>% Completed</th><th className={th + " text-right"}>Avg words / FLW msg</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {DATA.table3.map(function (r) {
@@ -356,6 +558,7 @@ function WorkflowUI(props) {
                           <td className={td + " text-right"}>{r.flws}</td><td className={td + " text-right"}>{r.ist}</td>
                           <td className={td + " text-right text-green-700 font-medium"}>{r.icmp}</td>
                           <td className={td + " text-right text-gray-500"}>{pctTxt(r.pct)}</td>
+                          <td className={td + " text-right text-gray-500"}>{r.avg_words == null ? "—" : r.avg_words}</td>
                         </tr>
                       );
                     })}
