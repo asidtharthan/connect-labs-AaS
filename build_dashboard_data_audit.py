@@ -34,19 +34,79 @@ chk("funnel identical to payload", dd["funnel"] == pay["funnel"], f"{len(dd['fun
 chk("table1 identical", dd["table1"] == pay["table1"])
 chk("table2 identical", dd["table2"] == pay["table2"])
 chk("table3 identical", dd["table3"] == pay["table3"])
+
+# avg_words: independent recompute = Σ session_human_words / Σ session_human_msgs over STARTED rows
+_ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2"}
+
+
+def _avg(pred):
+    hw = hm = 0
+    for r in bm.rows:
+        if r["is_started"] == "Y" and pred(r):
+            hw += int(r.get("session_human_words", 0) or 0)
+            hm += int(r.get("session_human_msgs", 0) or 0)
+    return round(hw / hm, 1) if hm else None
+
+
+_abt = ("ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B")
+aw_bad = 0
+for r in dd["table1"]:
+    exp = _avg((lambda x: True)) if r["key"] == "Overall" else _avg(lambda x, k=r["key"]: _ROLL[x["subgroup"]] == k)
+    if r.get("avg_words") != exp:
+        aw_bad += 1
+        print(f"   t1 {r['key']}: dd={r.get('avg_words')} exp={exp}")
+for r in dd["table3"]:
+    exp = _avg(lambda x: x["subgroup"] in _abt) if r["key"] == "Overall" else _avg(lambda x, k=r["key"]: x["subgroup"] == k)
+    if r.get("avg_words") != exp:
+        aw_bad += 1
+        print(f"   t3 {r['key']}: dd={r.get('avg_words')} exp={exp}")
+for r in dd["table2"]:
+    exp = _avg(lambda x, c=r["code"]: bm.SUBGROUP_DESIGN[x["subgroup"]]["topics"][int(x["interview_n"]) - 1] == c)
+    if r.get("avg_words") != exp:
+        aw_bad += 1
+        print(f"   t2 {r['code']}: dd={r.get('avg_words')} exp={exp}")
+chk("avg_words == independent recompute (Σwords/Σmsgs over started rows)", aw_bad == 0, f"{aw_bad} mismatches")
+
 ts_ok = True
 ts_bad = 0
 pay_ts = {t["code"]: t for t in pay["topic_status"]}
+_ORDER6 = ["not-applicable", "not-available-yet", "available-not-started", "available-missed-overdue",
+           "started-not-completed", "completed"]
+claimed_pairs = dd["counts"]["claimed_pairs"] if "claimed_pairs" in dd["counts"] else pay["counts"]["claimed_pairs"]
 for t in dd["topicStatus"]:
     p = pay_ts[t["code"]]
-    for s in STATES_NA:
+    for s in _ORDER6:
         if t[s] != p[s]:
             ts_ok = False
             ts_bad += 1
-    if t["applicable"] != sum(t[s] for s in STATES_NA):
+    if t["total"] != sum(t[s] for s in _ORDER6):
         ts_ok = False
         ts_bad += 1
-chk("topicStatus states == payload + applicable==sum(states)", ts_ok, f"{ts_bad} bad cells")
+    if t["applicable"] != t["total"] - t["not-applicable"]:
+        ts_ok = False
+        ts_bad += 1
+    # every claimed (cohort,flw) gets exactly one of the 6 states per topic -> total == claimed_pairs (constant)
+    if t["total"] != claimed_pairs:
+        ts_ok = False
+        ts_bad += 1
+chk("topicStatus 6 states==payload, total==Σstates==claimed_pairs, applicable==total-NA", ts_ok, f"{ts_bad} bad")
+# per-cohort topic breakdown: every cohort row's total == its 5 applicable-state sum; cohorts only where topic applies
+tsc_bad = 0
+for tc, rows_c in dd["topicStatusCohort"].items():
+    for rc in rows_c:
+        if rc["total"] != sum(rc[s] for s in STATES_NA):
+            tsc_bad += 1
+        sg = bm.cohort_to_sg(rc["cohort"])
+        if tc not in bm.SUBGROUP_DESIGN[sg]["topics"]:
+            tsc_bad += 1
+chk("topicStatusCohort: row total==Σ5states & topic applicable in cohort", tsc_bad == 0, f"{tsc_bad} bad")
+# cross-check: Σ per-cohort totals for a topic == that topic's applicable count
+xc_bad = 0
+tsmap = {t["code"]: t for t in dd["topicStatus"]}
+for tc, rows_c in dd["topicStatusCohort"].items():
+    if sum(rc["total"] for rc in rows_c) != tsmap[tc]["applicable"]:
+        xc_bad += 1
+chk("Σ per-cohort topic totals == topic applicable", xc_bad == 0, f"{xc_bad} mismatches")
 
 print("=" * 80)
 print("B. CONNECT FUNNEL — independent recompute from master + bm.sg_unique")
@@ -86,6 +146,46 @@ mono = all(
 chk("connect funnel monotonic invited>=accepted>=learnC>=claimed", mono)
 mono2 = all(cf[sg]["started"] >= cf[sg]["completed"] for sg in SG_ORDER)
 chk("started >= completed (all subgroups)", mono2)
+
+print("=" * 80)
+print("B2. DROPOFF matrix integrity + cross-consistency")
+print("=" * 80)
+fmap = {(f["sg"], f["n"]): f for f in dd["funnel"]}
+dsg = {s["sg"]: s for s in dd["dropoff"]["subgroups"]}
+xbad = 0
+for sg in SG_ORDER:
+    for iv in dsg[sg]["interviews"]:
+        f = fmap.get((sg, iv["n"]))
+        if not f or iv["triggered"] != f["trig"] or iv["started"] != f["started"] \
+                or iv["completed"] != f["completed"] or iv["eligible"] != f["elig"]:
+            xbad += 1
+chk("dropoff subgroup interviews == validated funnel (trig/started/completed/elig)", xbad == 0, f"{xbad} mismatches")
+cbad = 0
+for sg in SG_ORDER:
+    d, o = dsg[sg]["connect"], cf[sg]
+    for k in ("invited", "accepted", "learn_completed", "claimed", "initiated"):
+        if d[k] != o[k]:
+            cbad += 1
+chk("dropoff connect == Overview connectFunnel (shared fields)", cbad == 0, f"{cbad} mismatches")
+groups = [(s["sg"], s) for s in dd["dropoff"]["subgroups"]]
+ncoh = 0
+for sglist in dd["dropoff"]["cohorts"].values():
+    for c in sglist:
+        groups.append((c["cohort"], c))
+        ncoh += 1
+mbad = ibad = 0
+for name, g in groups:
+    c = g["connect"]
+    # logically-guaranteed monotonic subset: accepted<=invited, learn_completed<=learn_started, flw_reg<=claimed
+    if not (c["invited"] >= c["accepted"] and c["learn_started"] >= c["learn_completed"] and c["claimed"] >= c["flw_reg"]):
+        mbad += 1
+        print(f"    connect monotonic violation: {name} {c}")
+    for iv in g["interviews"]:
+        if not (iv["completed"] <= iv["started"] <= iv["triggered"]):
+            ibad += 1
+chk("connect funnel monotonic (accepted<=invited, learnC<=learnS, flwReg<=claimed) all groups", mbad == 0, f"{mbad} bad / {len(groups)}")
+chk("each interview completed<=started<=triggered (all subgroups+cohorts)", ibad == 0, f"{ibad} bad")
+chk("per-cohort dropoff present for every cohort", ncoh == len({r["cohort_id"] for r in bm.rows}), f"{ncoh} cohorts")
 
 print("=" * 80)
 print("C. COUNTS")

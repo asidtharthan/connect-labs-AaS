@@ -54,7 +54,7 @@ jobs:
           printf '%s' "${CONNECT_SNAP_1}${CONNECT_SNAP_2}${CONNECT_SNAP_3}" | base64 -d | gunzip > connect_user_data_snapshot.csv
           echo "snapshot rows: $(wc -l < connect_user_data_snapshot.csv)"
       - name: Refresh, audit, and publish dashboard
-        run: python refresh_interviews_dashboard.py --pull-hq --pull-ocs --push
+        run: python refresh_interviews_dashboard.py --pull-hq --pull-ocs --pull-words --push
       - name: Clean up snapshot (don't persist participant data on the runner)
         if: always()
         run: rm -f connect_user_data_snapshot.csv

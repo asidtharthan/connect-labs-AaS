@@ -4,11 +4,11 @@ No per-row data (those need the server-side phase). Emits payload_agg.json + siz
 """
 import json
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import build_master_4src as bm
 
-TODAY = date(2026, 6, 16)
+TODAY = date.today()  # drives status time-gating; dynamic so the daily job gates against the real date
 TOPICS = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"]
 ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2"}
@@ -19,11 +19,15 @@ for r in bm.rows:
     k = (r["connect_id"], r["cohort_id"], int(r["interview_n"]))
     c = cell.setdefault(
         k,
-        {"sg": r["subgroup"], "n": int(r["interview_n"]), "flw": r["connect_id"], "t": False, "s": False, "c": False},
+        {"sg": r["subgroup"], "n": int(r["interview_n"]), "flw": r["connect_id"],
+         "t": False, "s": False, "c": False, "hw": 0, "hm": 0},
     )
     c["t"] = True
     if r["is_started"] == "Y":
         c["s"] = True
+        # FLW message words/msgs for this started session (per-session; matched_session unique per row)
+        c["hw"] += int(r.get("session_human_words", 0) or 0)
+        c["hm"] += int(r.get("session_human_msgs", 0) or 0)
     if r["is_completed"] == "Y":
         c["c"] = True
 cells = list(cell.values())
@@ -75,12 +79,14 @@ for sg in SG_ORDER:
 
 # ---- Tables 1-3 ----
 def agg(keyfn, keys):
-    a = defaultdict(lambda: {"flw": set(), "ist": 0, "icmp": 0})
+    a = defaultdict(lambda: {"flw": set(), "ist": 0, "icmp": 0, "hw": 0, "hm": 0})
     for c in cells:
         for k in set(keyfn(c)):
             if c["s"]:
                 a[k]["flw"].add(c["flw"])
                 a[k]["ist"] += 1
+                a[k]["hw"] += c["hw"]
+                a[k]["hm"] += c["hm"]
             if c["c"]:
                 a[k]["icmp"] += 1
     return [
@@ -90,6 +96,7 @@ def agg(keyfn, keys):
             "ist": a[k]["ist"],
             "icmp": a[k]["icmp"],
             "pct": round(100 * a[k]["icmp"] / a[k]["ist"], 1) if a[k]["ist"] else None,
+            "avg_words": round(a[k]["hw"] / a[k]["hm"], 1) if a[k]["hm"] else None,
         }
         for k in keys
         if k in a
@@ -102,12 +109,14 @@ t3 = agg(
     ["ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "Overall"],
 )
 # Table 2 by topic
-t2a = defaultdict(lambda: {"flw": set(), "ist": 0, "icmp": 0})
+t2a = defaultdict(lambda: {"flw": set(), "ist": 0, "icmp": 0, "hw": 0, "hm": 0})
 for c in cells:
     tc = bm.SUBGROUP_DESIGN[c["sg"]]["topics"][c["n"] - 1]
     if c["s"]:
         t2a[tc]["flw"].add(c["flw"])
         t2a[tc]["ist"] += 1
+        t2a[tc]["hw"] += c["hw"]
+        t2a[tc]["hm"] += c["hm"]
     if c["c"]:
         t2a[tc]["icmp"] += 1
 t2 = [
@@ -118,6 +127,7 @@ t2 = [
         "ist": t2a[tc]["ist"],
         "icmp": t2a[tc]["icmp"],
         "pct": round(100 * t2a[tc]["icmp"] / t2a[tc]["ist"], 1) if t2a[tc]["ist"] else None,
+        "avg_words": round(t2a[tc]["hw"] / t2a[tc]["hm"], 1) if t2a[tc]["hm"] else None,
     }
     for tc in TOPICS
     if tc in t2a
@@ -169,6 +179,7 @@ def status_for(flw, cohort, topic):
 
 topic_status = defaultdict(lambda: defaultdict(int))
 sg_status = defaultdict(lambda: defaultdict(int))
+topic_status_cohort = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))  # topic -> cohort -> state -> n
 for cohort, info in bm.cohort_info.items():
     sg = info["subgroup"]
     claimed = [f for f in bm.cohort_flws[cohort] if bm.cohort_flw_meta[(cohort, f)].get("date_claimed")]
@@ -178,12 +189,97 @@ for cohort, info in bm.cohort_info.items():
             topic_status[topic][st] += 1
             if st != "not-applicable":
                 sg_status[sg][st] += 1
+                topic_status_cohort[topic][cohort][st] += 1
 topic_status_out = [
     {"code": tc, "name": bm.TOPIC_NAMES[tc], **{s: topic_status[tc][s] for s in STATES}} for tc in TOPICS
 ]
+# per-cohort topic status (for the by-cohort drilldown); only the 5 applicable states (topic is in the cohort)
+STATES5 = ["completed", "started-not-completed", "available-missed-overdue", "available-not-started", "not-available-yet"]
+topic_status_cohort_out = {}
+for tc in TOPICS:
+    rows_c = []
+    for cohort in sorted(topic_status_cohort.get(tc, {})):
+        d = topic_status_cohort[tc][cohort]
+        rows_c.append({"cohort": cohort, "total": sum(d[s] for s in STATES5), **{s: d[s] for s in STATES5}})
+    if rows_c:
+        topic_status_cohort_out[tc] = rows_c
+
+# ---- Retention Drop-off matrix (GW parity): Connect funnel + per-interview blocks ----
+# Eligible = # FLWs Initiated (constant per group), so %Started/%Triggered are retention rates.
+coh_init = defaultdict(set)  # cohort -> set of FLWs with any welcome form
+for (cohort, _topic), flws in bm.welcome_flws_by_key.items():
+    coh_init[cohort] |= flws
+coh_fset = defaultdict(lambda: {"t": set(), "s": set(), "c": set()})  # (cohort,n) -> unique-FLW sets
+for r in bm.rows:
+    key = (r["cohort_id"], int(r["interview_n"]))
+    coh_fset[key]["t"].add(r["connect_id"])
+    if r["is_started"] == "Y":
+        coh_fset[key]["s"].add(r["connect_id"])
+    if r["is_completed"] == "Y":
+        coh_fset[key]["c"].add(r["connect_id"])
+
+
+def _iv_blocks(topics, init_set, fget):
+    base = len(init_set) or 1
+    out = []
+    for i, tc in enumerate(topics):
+        n = i + 1
+        f = fget(n)
+        t, s, c = len(f["t"]), len(f["s"]), len(f["c"])
+        out.append({
+            "n": n, "topic": tc, "name": bm.TOPIC_NAMES[tc],
+            "eligible": len(init_set), "triggered": t, "pct_trig": round(100 * t / base, 1),
+            "started": s, "pct_started": round(100 * s / base, 1),
+            "completed": c, "pct_completed": round(100 * c / s, 1) if s else None,
+        })
+    return out
+
+
+dropoff_sg = []
+for sg in SG_ORDER:
+    u = bm.sg_unique[sg]
+    claimed = u["claimed"]
+    init = elig_sg.get(sg, set())
+    connect = {
+        "invited": len(u["invited"]), "accepted": len(u["accepted"]),
+        "learn_started": len(u["learn_started"]), "learn_completed": len(u["learn_completed"]),
+        "claimed": len(claimed), "flw_reg": len(claimed & bm.flw_registered), "initiated": len(init),
+    }
+    cohorts_n = sum(1 for c in bm.cohort_info if bm.cohort_info[c]["subgroup"] == sg)
+    dropoff_sg.append({
+        "sg": sg, "cohorts_n": cohorts_n, "connect": connect,
+        "interviews": _iv_blocks(bm.SUBGROUP_DESIGN[sg]["topics"], init, lambda n, _sg=sg: fset[(_sg, n)]),
+    })
+
+dropoff_cohorts = defaultdict(list)
+for cohort in sorted(bm.cohort_info):
+    sg = bm.cohort_info[cohort]["subgroup"]
+    flws = bm.cohort_flws[cohort]
+    inv = acc = ls = lc = 0
+    claimed_set = set()
+    for u in flws:
+        m = bm.cohort_flw_meta.get((cohort, u), {})
+        inv += 1 if m.get("invited_date") else 0
+        acc += 1 if m.get("accepted") else 0
+        ls += 1 if m.get("learn_started") else 0
+        lc += 1 if m.get("learn_completed") else 0
+        if m.get("date_claimed"):
+            claimed_set.add(u)
+    init = coh_init.get(cohort, set())
+    connect = {
+        "invited": inv, "accepted": acc, "learn_started": ls, "learn_completed": lc,
+        "claimed": len(claimed_set), "flw_reg": len(claimed_set & bm.flw_registered), "initiated": len(init),
+    }
+    dropoff_cohorts[sg].append({
+        "cohort": cohort, "connect": connect,
+        "interviews": _iv_blocks(bm.SUBGROUP_DESIGN[sg]["topics"], init,
+                                 lambda n, _c=cohort: coh_fset.get((_c, n), {"t": set(), "s": set(), "c": set()})),
+    })
+
+dropoff = {"subgroups": dropoff_sg, "cohorts": dict(dropoff_cohorts)}
 
 payload = {
-    "built_at": "2026-06-16",  # stamped at build; render shows this
+    "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),  # stamped at build; render shows this
     "today": str(TODAY),
     "counts": {
         "cohorts": len(bm.cohort_info),
@@ -202,6 +298,8 @@ payload = {
     "table2": t2,
     "table3": t3,
     "topic_status": topic_status_out,
+    "topic_status_cohort": topic_status_cohort_out,
+    "dropoff": dropoff,
     "states": STATES,
     "topics": TOPICS,
     "sg_order": SG_ORDER,
