@@ -19,6 +19,8 @@ env:
 jobs:
   build-base:
     name: Build & Push Base Image
+    # Only on the upstream repo — forks lack the AWS/ECR credentials and would always fail.
+    if: github.repository == 'jjackson/connect-labs'
     runs-on: ubuntu-latest
 
     permissions:

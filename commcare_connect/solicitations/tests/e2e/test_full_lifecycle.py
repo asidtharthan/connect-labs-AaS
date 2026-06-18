@@ -7,6 +7,7 @@ Persona 3 (Reviewer/James): Reviews response via web UI, scores against criteria
 
 All personas use jjackson+test account (profile: test-user).
 """
+# flake8: noqa: E501  (long realistic fixture strings in this e2e test)
 import concurrent.futures
 import os
 import sys
