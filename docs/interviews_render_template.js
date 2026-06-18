@@ -181,11 +181,12 @@ function WorkflowUI(props) {
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Connect Interviews Labs Dashboard</h1>
-            <p className="text-xs text-gray-400 mt-1">Last refreshed: {DATA.built_at || DATA.today || "—"}</p>
+            <p className="text-xs text-gray-400 mt-1">Data as of {DATA.built_at || DATA.today || "—"} · auto-refreshes daily ~06:00 UTC</p>
           </div>
-          <button onClick={function () { window.location.reload(); }} title="Reload the dashboard"
+          <button onClick={function () { window.location.reload(); }}
+            title="Data is rebuilt by the daily job; this just reloads the page — it does not pull new data on click."
             className="shrink-0 inline-flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
-            ↻ Reload
+            ↻ Reload page
           </button>
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-sm">
