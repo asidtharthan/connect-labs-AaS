@@ -18,6 +18,27 @@ Connect note: step 3 needs a headless Connect credential (PAT). Until that's wir
 --pull-connect and the Connect-funnel columns reuse the last local user_data snapshot (static),
 while HQ+OCS-derived numbers refresh live. See docs for the PAT setup.
 
+AUTO-LOAD (cohorts/subgroups appearing over time):
+  * HQ + OCS legs auto-load every cohort whose id maps to a known subgroup (cohort_to_sg in
+    build_master_4src.py: TRS/TRE/ABT1/ABT2/ABT3/PANEL). A NEW program type whose id matches none
+    is collected into bm.unmapped_cohorts and surfaced on the dashboard (amber notice) rather than
+    dropped — add a SUBGROUP_DESIGN entry + a cohort_to_sg branch to fold it in fully.
+  * A subgroup only appears once it has data (build_payload_agg present-only emit), so PANEL/ABT3
+    stay hidden until their first cohort launches.
+  * CONNECT FUNNEL is the one leg that does NOT auto-refresh: it comes from the static
+    connect_user_data_snapshot.csv (Connect has no headless auth — CORS + key secrecy). New cohorts'
+    Invited/Accepted/Claimed numbers update only when the snapshot is regenerated. To refresh it:
+      1. Re-pull Connect user_data into the per-cohort folders:
+           python fetch_all_cohorts.py            # needs a Connect PAT/token (browser-derived)
+         -> writes <cohort>_audit/user_data.csv for every cohort (new cohorts get new folders).
+      2. Consolidate the folders into the snapshot CSV (one row per FLW, prefixed with cohort_id =
+         folder name minus the "_audit" suffix). Columns: cohort_id, username, invited_date,
+         user_invite_status, date_learn_started, completed_learn_date, date_claimed.
+      3. Re-set the gzip+base64 GitHub secrets the daily CI reassembles (CONNECT_SNAP_1/2/3):
+           python setup_dashboard_secrets.py --repo <owner>/<name>
+         The snapshot CSV is NOT committed (participant ids); the daily job rebuilds it from the secrets.
+    (Run build locally with INTERVIEWS_CONNECT_SNAPSHOT=1 to force the snapshot path even when folders exist.)
+
 Usage:
   python refresh_interviews_dashboard.py                          # build + audit + inject (no creds)
   python refresh_interviews_dashboard.py --pull-hq --pull-ocs     # + live HQ/OCS pull

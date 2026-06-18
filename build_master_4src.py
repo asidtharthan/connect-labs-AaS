@@ -14,6 +14,7 @@ to match the baseline snapshot.
 import csv as _csv
 import json
 import os
+import re
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 from io import StringIO
@@ -43,6 +44,11 @@ SUBGROUP_DESIGN = {
     "ABT1-B": {"topics": ["1", "2", "3", "4"], "cadence": 7},
     "ABT2-A": {"topics": ["1", "2"], "cadence": 14},
     "ABT2-B": {"topics": ["1", "2", "5", "6", "7", "8", "9", "3"], "cadence": 3},
+    # Panel (Long-Term Engagement): one N/A subgroup, cohort ids 1PC1 (COWACDI) / 1PE1 (EHA).
+    "PANEL": {"topics": ["7", "1", "2", "3", "4", "5", "6", "8", "9", "10", "11"], "cadence": 4},
+    # A/B Test 3 (TBD; no data yet — present-only emit keeps these hidden until a cohort launches).
+    "ABT3-A": {"topics": ["8", "9", "10", "11"], "cadence": 7},
+    "ABT3-B": {"topics": ["8", "9", "10", "11"], "cadence": 7},
 }
 # Authoritative map locked to master_v7_2026-06-10 (incl. the 'Prevalance' typo in C).
 TOPIC_NAMES = {
@@ -60,6 +66,8 @@ TOPIC_NAMES = {
     "7": "Vaccines",
     "8": "Antibiotics and ACT Use",
     "9": "Medicine Quality & Counterfeiting",
+    "10": "Malaria 2",
+    "11": "Water & Diarrhea 2",
 }
 COHORT_TYPE_MAP = {
     "TRS": "Standard",
@@ -68,7 +76,14 @@ COHORT_TYPE_MAP = {
     "ABT1-B": "ABT1 B",
     "ABT2-A": "ABT2 A",
     "ABT2-B": "ABT2 B",
+    "PANEL": "Panel",
+    "ABT3-A": "ABT3 A",
+    "ABT3-B": "ABT3 B",
 }
+
+# Cohorts seen in the data whose id doesn't map to any known subgroup design. Collected (not dropped
+# silently) so a newly-launched program type is SURFACED on the dashboard instead of vanishing.
+unmapped_cohorts = set()
 
 
 def cohort_to_sg(c):
@@ -83,6 +98,10 @@ def cohort_to_sg(c):
         return "ABT1-A" if "A" in c[5:] else "ABT1-B"
     if "ABT2" in c:
         return "ABT2-A" if "A" in c[5:] else "ABT2-B"
+    if "ABT3" in c:
+        return "ABT3-A" if "A" in c[5:] else "ABT3-B"
+    if re.search(r"P[CE]\d", c):  # Panel cohorts: 1PC1 (COWACDI), 1PE1 (EHA) — tight pattern, not a loose "PE" substring
+        return "PANEL"
 
 
 def parse_dt(s):
@@ -140,6 +159,8 @@ cohort_info, cohort_flw_meta, cohort_flws = {}, {}, defaultdict(set)
 for cohort, rows in _iter_connect_sources():
     sg = cohort_to_sg(cohort)
     if sg is None:
+        if cohort:
+            unmapped_cohorts.add(cohort)
         continue
     training_date = None
     for row in rows:
@@ -259,7 +280,10 @@ for (flw, iv), trs in triggers_by_flw_iv.items():
     for tb in trs:
         cohort_id = tb["cohort_id"]
         sg = cohort_to_sg(cohort_id)
-        if not sg or iv not in SUBGROUP_DESIGN[sg]["topics"]:
+        if not sg:
+            unmapped_cohorts.add(cohort_id)  # has HQ trigger activity but no known design -> surface it
+            continue
+        if iv not in SUBGROUP_DESIGN[sg]["topics"]:
             continue
         n = SUBGROUP_DESIGN[sg]["topics"].index(iv) + 1
         m = matched.get(tb["form_id"])
@@ -303,6 +327,9 @@ with out.open("w", newline="", encoding="utf-8") as f:
     w.writeheader()
     w.writerows(rows)
 print(f"\nwrote {out.name}: {len(rows)} rows, {len({r['connect_id'] for r in rows})} FLWs")
+if unmapped_cohorts:
+    print(f"[!] {len(unmapped_cohorts)} UNMAPPED cohort(s) (new program type? add a SUBGROUP_DESIGN entry): "
+          f"{sorted(unmapped_cohorts)}")
 
 # ---------------- reconcile vs baseline (optional; absent server-side where the participant baseline isn't shipped) ----------------
 if BASELINE.exists():

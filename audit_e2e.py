@@ -13,9 +13,10 @@ from openpyxl import load_workbook
 import build_master_4src as bm  # the master under test
 
 TODAY = date.today()  # match the build's dynamic time-gating for the independent status recompute
-TOPICS = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
-SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B"]
-ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2"}
+TOPICS = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]
+SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "PANEL", "ABT3-A", "ABT3-B"]
+ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2",
+        "PANEL": "PANEL", "ABT3-A": "ABT3", "ABT3-B": "ABT3"}
 results = []  # (section, check, passed, detail)
 
 
@@ -149,12 +150,12 @@ for cohort, flw in claimed_pairs:
         grid[(cohort, flw, topic)] = status_for(flw, cohort, topic)
 chk(
     "C",
-    "grid complete (claimed_pairs x 14, no dup/missing)",
-    len(grid) == len(claimed_pairs) * 14,
-    f"{len(grid)} == {len(claimed_pairs)*14}",
+    f"grid complete (claimed_pairs x {len(TOPICS)}, no dup/missing)",
+    len(grid) == len(claimed_pairs) * len(TOPICS),
+    f"{len(grid)} == {len(claimed_pairs)*len(TOPICS)}",
 )
 na = sum(1 for v in grid.values() if v == "not-applicable")
-exp_na = sum(14 - len(bm.SUBGROUP_DESIGN[bm.cohort_to_sg(c)]["topics"]) for (c, f) in claimed_pairs)
+exp_na = sum(len(TOPICS) - len(bm.SUBGROUP_DESIGN[bm.cohort_to_sg(c)]["topics"]) for (c, f) in claimed_pairs)
 chk("C", "not-applicable count exact", na == exp_na, f"{na} == {exp_na}")
 # C: started/completed reconcile to master (claimed)
 g_comp = sum(1 for v in grid.values() if v == "completed")
@@ -298,7 +299,7 @@ t1mm = sum(
     )
 )
 chk("D", "Table1: payload == recompute", t1mm == 0, f"{t1mm} mismatched")
-t3a = agg(lambda c: ([c["sg"], "Overall"] if c["sg"].startswith(("ABT1", "ABT2")) else []), None)
+t3a = agg(lambda c: ([c["sg"], "Overall"] if c["sg"].startswith(("ABT1", "ABT2", "ABT3")) else []), None)
 t3mm = sum(
     1
     for row in payload["table3"]
@@ -333,10 +334,10 @@ for row in payload["topic_status"]:
     for s in payload["states"]:
         if sum(1 for k, v in grid.items() if k[2] == row["code"] and v == s) != row[s]:
             tsmm += 1
-chk("D", "topic_status dist: payload == grid recompute (14x6 cells)", tsmm == 0, f"{tsmm} mismatched cells")
-# line series == funnel pct_started
+chk("D", "topic_status dist: payload == grid recompute (all topic×state cells)", tsmm == 0, f"{tsmm} mismatched cells")
+# line series == funnel pct_started (over present subgroups only)
 lmm = 0
-for sg in SG_ORDER:
+for sg in payload["line_pct_started"]:
     fr = [r for r in payload["funnel"] if r["sg"] == sg]
     if [r["pct_started"] for r in sorted(fr, key=lambda x: x["n"])] != payload["line_pct_started"][sg]:
         lmm += 1
