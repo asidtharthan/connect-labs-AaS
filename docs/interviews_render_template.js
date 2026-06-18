@@ -47,7 +47,7 @@ function WorkflowUI(props) {
   var STATE_LABEL = { "not-applicable": "Not applicable", "not-available-yet": "Not available yet",
     "available-not-started": "Available, not started", "available-missed-overdue": "Available, missed/overdue",
     "started-not-completed": "Started, not completed", "completed": "Completed" };
-  var STATE_COLOR = { "not-applicable": "#e5e7eb", "not-available-yet": "#cbd5e1",
+  var STATE_COLOR = { "not-applicable": "#e5e7eb", "not-available-yet": "#6366f1",
     "available-not-started": "#f59e0b", "available-missed-overdue": "#ef4444",
     "started-not-completed": "#84cc16", "completed": "#16a34a" };
   var STATE_DEF = {
@@ -225,39 +225,6 @@ function WorkflowUI(props) {
               })}
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Completed interviews by round (unique FLWs per subgroup)</h3>
-              <p className="text-xs text-gray-400 mb-2"># FLWs who completed each interview number — completion beyond the 1st interview, not just the first.</p>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50"><tr>
-                    <th className={th + " text-left"}>Subgroup</th>
-                    {Array.apply(null, { length: maxIv }).map(function (_, i) {
-                      return <th key={i} className={th + " text-right"}>Int {i + 1}</th>;
-                    })}
-                  </tr></thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {DATA.dropoff.subgroups.map(function (s) {
-                      var byN = {};
-                      s.interviews.forEach(function (iv) { byN[iv.n] = iv; });
-                      return (
-                        <tr key={s.sg} className="hover:bg-gray-50">
-                          <td className={td + " font-medium"}>{s.sg}</td>
-                          {Array.apply(null, { length: maxIv }).map(function (_, i) {
-                            var iv = byN[i + 1];
-                            return (
-                              <td key={i} className={td + " text-right" + (iv && iv.completed ? " text-green-700 font-medium" : " text-gray-300")}>
-                                {iv ? iv.completed : "—"}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Connect funnel by subgroup</h3>
               <p className="text-xs text-gray-400 mb-2">Invited → Accepted → Completed Learn → Claimed from Connect (user_data); Initiated = any Welcome form; Started/Completed from OCS sessions.</p>
               <div className="overflow-x-auto">
@@ -284,6 +251,39 @@ function WorkflowUI(props) {
                           <td className={td + " text-right"}>{r.initiated}</td>
                           <td className={td + " text-right"}>{r.started}</td>
                           <td className={td + " text-right text-green-700 font-medium"}>{r.completed}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Completed interviews by round (unique FLWs per subgroup)</h3>
+              <p className="text-xs text-gray-400 mb-2"># FLWs who completed each interview number — completion beyond the 1st interview, not just the first.</p>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50"><tr>
+                    <th className={th + " text-left"}>Subgroup</th>
+                    {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                      return <th key={i} className={th + " text-right"}>Int {i + 1}</th>;
+                    })}
+                  </tr></thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {DATA.dropoff.subgroups.map(function (s) {
+                      var byN = {};
+                      s.interviews.forEach(function (iv) { byN[iv.n] = iv; });
+                      return (
+                        <tr key={s.sg} className="hover:bg-gray-50">
+                          <td className={td + " font-medium"}>{s.sg}</td>
+                          {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                            var iv = byN[i + 1];
+                            return (
+                              <td key={i} className={td + " text-right" + (iv && iv.completed ? " text-green-700 font-medium" : " text-gray-300")}>
+                                {iv ? iv.completed : "—"}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     })}
@@ -381,17 +381,45 @@ function WorkflowUI(props) {
                           </tr>
                         );
                         if (open) {
-                          (DATA.topicStatusCohort[t.code] || []).forEach(function (rc) {
-                            rows.push(
-                              <tr key={t.code + "-" + rc.cohort} className="bg-gray-50">
-                                <td className={td + " pl-6 text-gray-600"}>{rc.cohort} <span className="text-gray-400">(n={rc.total})</span></td>
-                                <td className={td + " text-right text-gray-300"}>—</td>
-                                {STATES5.map(function (s) {
-                                  return <td key={s} className={td + " text-right" + (s === "completed" ? " text-green-700" : " text-gray-500")}>{p(rc[s], rc.total)}</td>;
-                                })}
-                              </tr>
-                            );
-                          });
+                          var cohRows = DATA.topicStatusCohort[t.code] || [];
+                          rows.push(
+                            <tr key={t.code + "-exp"} className="bg-gray-50">
+                              <td className={td} colSpan={STATES.length + 1} style={{ padding: 0 }}>
+                                <div className="my-2 ml-8 mr-3 border-l-2 border-gray-300 pl-3">
+                                  <div className="text-xs font-medium text-gray-500 mb-1">
+                                    By cohort — {t.code} · {TOPIC_NAMES[t.code] || t.code} ({cohRows.length} cohort{cohRows.length === 1 ? "" : "s"})
+                                  </div>
+                                  <table className="min-w-full border border-gray-200 rounded-md overflow-hidden">
+                                    <thead className="bg-white"><tr>
+                                      <th className={th + " text-left"}>Cohort</th>
+                                      <th className={th + " text-left"}>Distribution</th>
+                                      {STATES5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
+                                    </tr></thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {cohRows.map(function (rc) {
+                                        return (
+                                          <tr key={rc.cohort} className="bg-white hover:bg-gray-50">
+                                            <td className={td + " text-gray-700"}>{rc.cohort} <span className="text-gray-400">(n={rc.total})</span></td>
+                                            <td className={td}>
+                                              <div style={{ display: "flex", width: 120, height: 10, borderRadius: 2, overflow: "hidden", border: "1px solid #e5e7eb" }}>
+                                                {STATES5.map(function (s) {
+                                                  var w = rc.total ? (100 * rc[s] / rc.total) : 0;
+                                                  return w > 0 ? <div key={s} title={STATE_LABEL[s] + ": " + (Math.round(10 * w) / 10) + "%"} style={{ width: w + "%", backgroundColor: STATE_COLOR[s] }}></div> : null;
+                                                })}
+                                              </div>
+                                            </td>
+                                            {STATES5.map(function (s) {
+                                              return <td key={s} className={td + " text-right" + (s === "completed" ? " text-green-700" : " text-gray-500")}>{p(rc[s], rc.total)}</td>;
+                                            })}
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          );
                         }
                         return rows;
                       })}
