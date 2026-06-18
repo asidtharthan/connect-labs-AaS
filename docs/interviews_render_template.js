@@ -20,6 +20,8 @@ function WorkflowUI(props) {
   var funExp = fex[0], setFunExp = fex[1];   // expanded subgroups in the drop-off matrix
   var tex = React.useState({});
   var topicExp = tex[0], setTopicExp = tex[1];   // expanded topics in topic-completion drilldown
+  var tcc = React.useState("stacked");
+  var topicChart = tcc[0], setTopicChart = tcc[1];   // topic-completion chart type: stacked | scoreboard | heatmap
   var gss = React.useState("");
   var gSearch = gss[0], setGSearch = gss[1];   // granular session search box
   var gpp = React.useState(0);
@@ -94,7 +96,7 @@ function WorkflowUI(props) {
 
   // ---- stacked bar chart (Table View > Topic completion) ----
   React.useEffect(function () {
-    if (activeTab !== "table" || tableSub !== "topiccomplete") return;
+    if (activeTab !== "table" || tableSub !== "topiccomplete" || topicChart !== "stacked") return;
     if (!barRef.current || !window.Chart) return;
     if (barInst.current) barInst.current.destroy();
     barInst.current = new window.Chart(barRef.current.getContext("2d"), {
@@ -110,7 +112,7 @@ function WorkflowUI(props) {
         scales: { x: { stacked: true, max: 100, title: { display: true, text: "% of claimed FLWs" } }, y: { stacked: true } } }
     });
     return function () { if (barInst.current) { barInst.current.destroy(); barInst.current = null; } };
-  }, [activeTab, tableSub]);
+  }, [activeTab, tableSub, topicChart]);
 
   function subBtn(cur, val, set, label) {
     var on = cur === val;
@@ -120,6 +122,12 @@ function WorkflowUI(props) {
         {label}
       </button>
     );
+  }
+
+  function rgbaOf(hex, a) {
+    var h = String(hex).replace("#", "");
+    var r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
   }
 
   function ivRow(key, label, iv, indent) {
@@ -358,7 +366,67 @@ function WorkflowUI(props) {
                     );
                   })}
                 </Legend>
-                <div style={{ height: "420px" }}><canvas ref={barRef}></canvas></div>
+                <div className="flex flex-wrap gap-2 px-1">
+                  {subBtn(topicChart, "stacked", setTopicChart, "Stacked bar")}
+                  {subBtn(topicChart, "scoreboard", setTopicChart, "Completion scoreboard")}
+                  {subBtn(topicChart, "heatmap", setTopicChart, "Heatmap")}
+                </div>
+                {topicChart === "stacked" && (
+                  <div style={{ height: "420px" }}><canvas ref={barRef}></canvas></div>
+                )}
+                {topicChart === "scoreboard" && (
+                  <div className="px-1">
+                    <p className="text-xs text-gray-400 mb-2">% completed of the FLWs each topic applies to (excludes the not-applicable group), sorted high → low.</p>
+                    {DATA.topicStatus.slice().sort(function (a, b) {
+                      var pa = a.applicable ? a.completed / a.applicable : -1;
+                      var pb = b.applicable ? b.completed / b.applicable : -1;
+                      return pb - pa;
+                    }).map(function (t) {
+                      var pct = t.applicable ? Math.round(1000 * t.completed / t.applicable) / 10 : null;
+                      return (
+                        <div key={t.code} className="flex items-center gap-2 py-1">
+                          <div className="text-xs text-gray-600 truncate" style={{ width: "13rem", flexShrink: 0 }}>{t.code} · {TOPIC_NAMES[t.code] || t.code}</div>
+                          <div className="flex-1" style={{ background: "#f1f5f9", borderRadius: 4, height: 16, minWidth: 120 }}>
+                            <div title={(pct == null ? "—" : pct + "%") + " completed"} style={{ width: (pct == null ? 0 : pct) + "%", background: STATE_COLOR["completed"], height: "100%", borderRadius: 4 }}></div>
+                          </div>
+                          <div className="text-xs font-medium text-gray-700 text-right" style={{ width: "3.5rem", flexShrink: 0 }}>{pct == null ? "—" : pct + "%"}</div>
+                          <div className="text-xs text-gray-400 text-right" style={{ width: "5.5rem", flexShrink: 0 }}>applies {t.applicable}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {topicChart === "heatmap" && (
+                  <div className="overflow-x-auto px-1">
+                    <p className="text-xs text-gray-400 mb-2">Each cell = % of applicable FLWs in that stage (darker = higher). Rows = topics, columns = the 5 applicable stages.</p>
+                    <table className="min-w-full border border-gray-200">
+                      <thead className="bg-gray-50"><tr>
+                        <th className={th + " text-left"}>Topic</th>
+                        <th className={th + " text-right"}>Applies</th>
+                        {STATES5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
+                      </tr></thead>
+                      <tbody>
+                        {DATA.topicStatus.map(function (t) {
+                          return (
+                            <tr key={t.code}>
+                              <td className={td + " font-medium text-gray-700"}>{t.code} · {TOPIC_NAMES[t.code] || t.code}</td>
+                              <td className={td + " text-right text-gray-400"}>{t.applicable}</td>
+                              {STATES5.map(function (s) {
+                                var frac = t.applicable ? t[s] / t.applicable : 0;
+                                var pct = t.applicable ? Math.round(1000 * t[s] / t.applicable) / 10 : null;
+                                return (
+                                  <td key={s} className={td + " text-right"} style={{ backgroundColor: rgbaOf(STATE_COLOR[s], t.applicable ? (0.08 + 0.92 * frac) : 0) }}>
+                                    {pct == null ? "—" : pct + "%"}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50"><tr>
@@ -493,14 +561,48 @@ function WorkflowUI(props) {
                     );
                     s.interviews.forEach(function (iv) { rows.push(ivRow(s.sg + "-" + iv.n, "Int " + iv.n, iv, "")); });
                     if (open) {
-                      (DATA.dropoff.cohorts[s.sg] || []).forEach(function (co) {
-                        rows.push(
-                          <tr key={s.sg + "-" + co.cohort + "-h"} className="bg-gray-50">
-                            <td className={td + " pl-6 font-medium text-gray-600"} colSpan={9}>{co.cohort}</td>
-                          </tr>
-                        );
-                        co.interviews.forEach(function (iv) { rows.push(ivRow(co.cohort + "-" + iv.n, "Int " + iv.n, iv, "pl-8")); });
-                      });
+                      var cos = DATA.dropoff.cohorts[s.sg] || [];
+                      rows.push(
+                        <tr key={s.sg + "-exp"} className="bg-gray-50">
+                          <td className={td} colSpan={9} style={{ padding: 0 }}>
+                            <div className="my-2 ml-6 mr-3 border-l-2 border-indigo-200 pl-3 space-y-3">
+                              {cos.map(function (co) {
+                                return (
+                                  <div key={co.cohort}>
+                                    <div className="text-xs font-medium text-gray-500 mb-1">{co.cohort} — {co.interviews.length} interview{co.interviews.length === 1 ? "" : "s"}</div>
+                                    <table className="min-w-full border border-gray-200 rounded-md overflow-hidden">
+                                      <thead className="bg-white"><tr>
+                                        <th className={th + " text-left"}>Int</th><th className={th + " text-left"}>Topic</th>
+                                        <th className={th + " text-right"}>Eligible</th><th className={th + " text-right"}>Triggered</th>
+                                        <th className={th + " text-right"}>% Trig</th><th className={th + " text-right"}>Started</th>
+                                        <th className={th + " text-right"}>% Started</th><th className={th + " text-right"}>Completed</th>
+                                        <th className={th + " text-right"}>% Completed</th>
+                                      </tr></thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {co.interviews.map(function (iv) {
+                                          return (
+                                            <tr key={co.cohort + "-" + iv.n} className="bg-white hover:bg-gray-50">
+                                              <td className={td + " text-gray-500"}>Int {iv.n}</td>
+                                              <td className={td}>{iv.name}</td>
+                                              <td className={td + " text-right"}>{iv.eligible}</td>
+                                              <td className={td + " text-right"}>{iv.triggered}</td>
+                                              <td className={td + " text-right text-gray-500"}>{iv.pct_trig}%</td>
+                                              <td className={td + " text-right"}>{iv.started}</td>
+                                              <td className={td + " text-right text-gray-500"}>{iv.pct_started}%</td>
+                                              <td className={td + " text-right text-green-700 font-medium"}>{iv.completed}</td>
+                                              <td className={td + " text-right text-gray-500"}>{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      );
                     }
                     return rows;
                   })}
