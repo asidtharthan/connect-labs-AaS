@@ -176,10 +176,36 @@ def push(render_code):
         print(
             f"--- push: render_code_version {v0} -> {new_v}  {'OK' if ok else 'UNEXPECTED: ' + str(res)}", flush=True
         )
-        return ok
+        return new_v if ok else False
     except Exception as e:
         print(f"--- push FAILED: {repr(e)[:300]}", flush=True)
         return False
+
+
+def write_github_summary(pushed_version):
+    """Write a clear run summary to GITHUB_STEP_SUMMARY (visible on the Actions run + drives the daily ping)."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        d = json.load(open(DATA_JSON, encoding="utf-8"))
+        c = d.get("counts", {})
+        ok = bool(pushed_version)
+        head = "✅ Dashboard updated" if ok else "⚠️ Built but NOT published"
+        lines = [
+            f"## {head} — Connect Interviews",
+            "",
+            f"- **Status:** {'published render v' + str(pushed_version) if ok else 'not published'}",
+            f"- **Cohorts:** {c.get('cohorts')}  ·  **FLWs:** {c.get('flws')}",
+            f"- **Interviews started:** {c.get('started')}  ·  **completed:** {c.get('completed')}",
+            f"- **Data as of:** {d.get('today', '')}",
+            "",
+            f"[Open the dashboard »](https://labs.connect.dimagi.com/labs/workflow/{WORKFLOW_ID}/run/?opportunity_id={OWNER_OPP})",
+        ]
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    except Exception as e:
+        print(f"  (summary write skipped: {e})", flush=True)
 
 
 def main():
@@ -218,11 +244,13 @@ def main():
     render = inject()
 
     # 8: push (gated on token)
+    pushed_version = None
     if args.push:
-        push(render)
+        pushed_version = push(render)
     else:
         print("\n=== 8. push: skipped (no --push) ===", flush=True)
 
+    write_github_summary(pushed_version)
     print("\nDONE.", flush=True)
 
 
