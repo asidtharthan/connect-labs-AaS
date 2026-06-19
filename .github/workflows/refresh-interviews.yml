@@ -18,7 +18,7 @@ name: Refresh Interviews Dashboard
 
 on:
   schedule:
-    - cron: '0 6 * * *' # 06:00 UTC daily
+    - cron: '37 4 * * *' # 04:37 UTC daily — off-peak, odd minute (avoids top-of-hour scheduler congestion that delayed the '0 6' run by ~4h)
   workflow_dispatch: {} # also runnable on-demand from the Actions tab
 
 concurrency:
