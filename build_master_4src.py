@@ -35,6 +35,9 @@ ALL_DOMAINS = [
     "connect-interview-eha",
     "connect-interview-cowac-2",
     "connect-interview-eha-2",
+    # Panel (Long-Term Engagement) — separate domains, cohorts 1PC1 (COWACDI) / 1PE1 (EHA).
+    "ccc-interview-panel-cowac",
+    "ccc-interview-panel-eha",
 ]
 
 SUBGROUP_DESIGN = {
@@ -104,6 +107,15 @@ def cohort_to_sg(c):
         return "PANEL"
 
 
+# Test/QA cohorts (e.g. "02_Test", "01_Test" seen in the Panel domains) — drop entirely,
+# don't surface them as amber "unmapped" notices on the dashboard.
+_TEST_COHORT_RE = re.compile(r"_test", re.IGNORECASE)
+
+
+def is_test_cohort(c):
+    return bool(c) and bool(_TEST_COHORT_RE.search(str(c)))
+
+
 def parse_dt(s):
     if s is None or s == "" or (isinstance(s, float) and pd.isna(s)):
         return None
@@ -159,7 +171,7 @@ cohort_info, cohort_flw_meta, cohort_flws = {}, {}, defaultdict(set)
 for cohort, rows in _iter_connect_sources():
     sg = cohort_to_sg(cohort)
     if sg is None:
-        if cohort:
+        if cohort and not is_test_cohort(cohort):
             unmapped_cohorts.add(cohort)
         continue
     training_date = None
@@ -281,7 +293,8 @@ for (flw, iv), trs in triggers_by_flw_iv.items():
         cohort_id = tb["cohort_id"]
         sg = cohort_to_sg(cohort_id)
         if not sg:
-            unmapped_cohorts.add(cohort_id)  # has HQ trigger activity but no known design -> surface it
+            if cohort_id and not is_test_cohort(cohort_id):
+                unmapped_cohorts.add(cohort_id)  # has HQ trigger activity but no known design -> surface it
             continue
         if iv not in SUBGROUP_DESIGN[sg]["topics"]:
             continue
