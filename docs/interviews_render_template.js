@@ -22,6 +22,8 @@ function WorkflowUI(props) {
   var topicExp = tex[0], setTopicExp = tex[1];   // expanded topics in topic-completion drilldown
   var tcc = React.useState("stacked");
   var topicChart = tcc[0], setTopicChart = tcc[1];   // topic-completion chart type: stacked | scoreboard | heatmap
+  var tcm = React.useState("pct");
+  var tcMode = tcm[0], setTcMode = tcm[1];   // topic-completion value mode: pct | count (raw interview counts)
   var gss = React.useState("");
   var gSearch = gss[0], setGSearch = gss[1];   // granular session search box
   var gpp = React.useState(0);
@@ -99,20 +101,21 @@ function WorkflowUI(props) {
     if (activeTab !== "table" || tableSub !== "topiccomplete" || topicChart !== "stacked") return;
     if (!barRef.current || !window.Chart) return;
     if (barInst.current) barInst.current.destroy();
+    var isCount = tcMode === "count";
     barInst.current = new window.Chart(barRef.current.getContext("2d"), {
       type: "bar",
       data: { labels: DATA.topicStatus.map(function (t) { return t.code + " · " + (TOPIC_NAMES[t.code] || t.code); }),
         datasets: STATES.map(function (st) {
           return { label: STATE_LABEL[st],
-            data: DATA.topicStatus.map(function (t) { return t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0; }),
+            data: DATA.topicStatus.map(function (t) { return isCount ? (t[st] || 0) : (t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0); }),
             backgroundColor: STATE_COLOR[st] }; }) },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
-        plugins: { title: { display: true, text: "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom" },
-          tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + "%"; } } } },
-        scales: { x: { stacked: true, max: 100, title: { display: true, text: "% of claimed FLWs" } }, y: { stacked: true } } }
+        plugins: { title: { display: true, text: isCount ? "FLW status distribution by topic — # of claimed FLWs" : "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom" },
+          tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + (isCount ? "" : "%"); } } } },
+        scales: { x: { stacked: true, max: isCount ? undefined : 100, title: { display: true, text: isCount ? "# of claimed FLWs" : "% of claimed FLWs" } }, y: { stacked: true } } }
     });
     return function () { if (barInst.current) { barInst.current.destroy(); barInst.current = null; } };
-  }, [activeTab, tableSub, topicChart]);
+  }, [activeTab, tableSub, topicChart, tcMode]);
 
   function subBtn(cur, val, set, label) {
     var on = cur === val;
@@ -367,10 +370,14 @@ function WorkflowUI(props) {
                     );
                   })}
                 </Legend>
-                <div className="flex flex-wrap gap-2 px-1">
+                <div className="flex flex-wrap items-center gap-2 px-1">
                   {subBtn(topicChart, "stacked", setTopicChart, "Stacked bar")}
                   {subBtn(topicChart, "scoreboard", setTopicChart, "Completion scoreboard")}
                   {subBtn(topicChart, "heatmap", setTopicChart, "Heatmap")}
+                  <span className="mx-1 text-gray-300">|</span>
+                  <span className="text-xs text-gray-400">Show:</span>
+                  {subBtn(tcMode, "pct", setTcMode, "%")}
+                  {subBtn(tcMode, "count", setTcMode, "Raw counts")}
                 </div>
                 {topicChart === "stacked" && (
                   <div style={{ height: "420px" }}><canvas ref={barRef}></canvas></div>
@@ -438,7 +445,7 @@ function WorkflowUI(props) {
                       {DATA.topicStatus.map(function (t) {
                         var open = !!topicExp[t.code];
                         var has = (DATA.topicStatusCohort[t.code] || []).length > 0;
-                        function p(s, tot) { return tot ? Math.round(1000 * s / tot) / 10 + "%" : "—"; }
+                        function p(s, tot) { return tcMode === "count" ? s : (tot ? Math.round(1000 * s / tot) / 10 + "%" : "—"); }
                         var rows = [];
                         rows.push(
                           <tr key={t.code} className={"hover:bg-gray-50 " + (has ? "cursor-pointer" : "")}

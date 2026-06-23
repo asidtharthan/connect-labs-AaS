@@ -82,6 +82,9 @@ for sg in SG_PRESENT:
                 "pct_trig": round(100 * t / elig, 1),
                 "pct_started": round(100 * s / elig, 1),
                 "pct_completed": round(100 * cc / s, 1) if s else None,
+                # completion as a share of the INITIATED base (retention), not of this interview's
+                # starters — for the "pay per interview" / full retention table (Screenshot 104).
+                "pct_completed_base": round(100 * cc / elig, 1),
             }
         )
         series.append(round(100 * s / elig, 1))
@@ -246,6 +249,7 @@ def _iv_blocks(topics, init_set, fget):
             "eligible": len(init_set), "triggered": t, "pct_trig": round(100 * t / base, 1),
             "started": s, "pct_started": round(100 * s / base, 1),
             "completed": c, "pct_completed": round(100 * c / s, 1) if s else None,
+            "pct_completed_base": round(100 * c / base, 1),  # completed / initiated base (retention)
         })
     return out
 
