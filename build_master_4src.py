@@ -240,7 +240,16 @@ for domain in ALL_DOMAINS:
             if not cohort_id:
                 continue
             if ft == "welcome_click_start":
-                welcome_flws_by_key[(cohort_id, niv)].add(cid)
+                # Backfill blank next_interview -> the subgroup's FIRST topic, so Int#1 Eligible
+                # ties out to # Initiated (a blank Welcome = an Interview-1 Welcome). Trigger forms
+                # with blank next_interview are still dropped (deliberate asymmetry; 0 effect on
+                # started/completed). Unmapped/test cohorts (sg None) keep the blank key -> excluded.
+                wniv = niv
+                if wniv == "":
+                    _wsg = cohort_to_sg(cohort_id)
+                    if _wsg:
+                        wniv = SUBGROUP_DESIGN[_wsg]["topics"][0]
+                welcome_flws_by_key[(cohort_id, wniv)].add(cid)
             else:
                 triggers_by_flw_iv[(cid, niv)].append(
                     {
