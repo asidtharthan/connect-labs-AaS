@@ -60,8 +60,11 @@ for sg in SG_ORDER:
 
 # ---- line series bases ----
 line_series = []
+_line_di = payload.get("line_pct_started_di", {})
 for sg in SG_ORDER:
-    line_series.append({"sg": sg, "base": len(elig_sg.get(sg, set())), "pts": payload["line_pct_started"].get(sg, [])})
+    line_series.append({"sg": sg, "base": len(elig_sg.get(sg, set())),
+                        "pts": payload["line_pct_started"].get(sg, []),
+                        "pts_di": _line_di.get(sg, [])})  # de-impacted %started (item 8)
 
 # ---- topicStatus reshaped: all 6 states (incl not-applicable) + total (for %-stack to 100) ----
 ORDER6 = [
@@ -196,6 +199,7 @@ out = {
     "granular": granular,
     "granular_total": len(bm.rows),
     "flwMatrix": flw_matrix,
+    "deimpact": payload.get("deimpact", {}),
     "unmappedCohorts": payload.get("unmapped_cohorts", []),
 }
 s = json.dumps(out, separators=(",", ":"))

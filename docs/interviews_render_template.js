@@ -34,6 +34,8 @@ function WorkflowUI(props) {
   var gf2 = React.useState(""); var fCo = gf2[0], setFCo = gf2[1];   // filter: cohort
   var gf3 = React.useState(""); var fSt = gf3[0], setFSt = gf3[1];   // filter: status (state)
   var gf4 = React.useState(""); var fTr = gf4[0], setFTr = gf4[1];   // filter: trained | untrained
+  var dimp = React.useState(false);
+  var deImpact = dimp[0], setDeImpact = dimp[1];   // item 8: raw vs de-impacted (penult/last artifact)
   var lineRef = React.useRef(null), lineInst = React.useRef(null);
   var barRef = React.useRef(null), barInst = React.useRef(null);
 
@@ -96,14 +98,15 @@ function WorkflowUI(props) {
     lineInst.current = new window.Chart(lineRef.current.getContext("2d"), {
       type: "line",
       data: { labels: labels, datasets: DATA.lineSeries.map(function (s) {
-        return { label: s.sg + " (n=" + s.base + ")", data: s.pts, borderColor: SG_COLOR[s.sg],
+        var pts = (deImpact && s.pts_di && s.pts_di.length) ? s.pts_di : s.pts;
+        return { label: s.sg + " (n=" + s.base + ")", data: pts, borderColor: SG_COLOR[s.sg],
           backgroundColor: SG_COLOR[s.sg], fill: false, tension: 0.2, spanGaps: true }; }) },
       options: { responsive: true, maintainAspectRatio: false,
         plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup)" }, legend: { position: "bottom" } },
         scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
-  }, [activeTab]);
+  }, [activeTab, deImpact]);
 
   // ---- stacked bar chart (Table View > Topic completion) ----
   React.useEffect(function () {
@@ -143,6 +146,10 @@ function WorkflowUI(props) {
   }
 
   function ivRow(key, label, iv, indent) {
+    var di = deImpact && iv.started_di != null;
+    var stVal = di ? iv.started_di : iv.started;
+    var pstVal = di ? iv.pct_started_di : iv.pct_started;
+    var changed = di && iv.started_di !== iv.started;
     return (
       <tr key={key} className="hover:bg-gray-50">
         <td className={td + " " + indent + " text-gray-500"}>{label}</td>
@@ -150,8 +157,8 @@ function WorkflowUI(props) {
         <td className={td + " text-right"}>{iv.eligible}</td>
         <td className={td + " text-right"}>{iv.triggered}</td>
         <td className={td + " text-right text-gray-500"}>{iv.pct_trig}%</td>
-        <td className={td + " text-right"}>{iv.started}</td>
-        <td className={td + " text-right text-gray-500"}>{iv.pct_started}%</td>
+        <td className={td + " text-right" + (changed ? " text-amber-700 font-medium" : "")} title={changed ? "de-impacted (raw " + iv.started + ")" : ""}>{stVal}</td>
+        <td className={td + " text-right text-gray-500"}>{pstVal}%</td>
         <td className={td + " text-right text-green-700 font-medium"}>{iv.completed}</td>
         <td className={td + " text-right text-gray-500"}>{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</td>
       </tr>
@@ -619,6 +626,16 @@ function WorkflowUI(props) {
 
         {activeTab === "funnels" && (
           <div className="p-3 space-y-4">
+            <div className="flex flex-wrap items-center gap-2 px-1">
+              <span className="text-xs font-medium text-gray-600">Penult/last artifact:</span>
+              {subBtn(deImpact ? "di" : "raw", "raw", function () { setDeImpact(false); }, "Raw")}
+              {subBtn(deImpact ? "di" : "raw", "di", function () { setDeImpact(true); }, "De-impacted")}
+              {deImpact ? (
+                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  Removes FLWs who started only the LAST interview (skipped the penultimate — the two were triggered back-to-back) from the last interview's Started, revealing the true decline. Affects the line chart &amp; drop-off %Started below.
+                </span>
+              ) : null}
+            </div>
             <div style={{ height: "380px" }}><canvas ref={lineRef}></canvas></div>
 
             <Legend title="What these columns mean">
