@@ -258,6 +258,52 @@ for g in dd["granular"]:
 chk("every granular row matches a real master row (flags+topic)", gbad == 0, f"{gbad} bad / 500")
 
 print("=" * 80)
+print("F. NEW FEATURES — FLW×Topic matrix (4), de-impact (8), completed-of-base (6)")
+print("=" * 80)
+fm = dd.get("flwMatrix", [])
+chk("flwMatrix row count == claimed (FLW,cohort) pairs", len(fm) == claimed_pairs, f"{len(fm)} == {claimed_pairs}")
+cell_bad = 0
+for r in fm:
+    topics = bm.SUBGROUP_DESIGN.get(r["g"], {}).get("topics", [])
+    if len(r["s"]) != len(topics):
+        cell_bad += 1
+    if any((not isinstance(x, int)) or x < 1 or x > 5 for x in r["s"]):
+        cell_bad += 1  # cells for in-design topics are always states 1..5 (never not-applicable)
+chk("flwMatrix: cells align to subgroup topics & are states 1..5", cell_bad == 0, f"{cell_bad} bad rows")
+m_comp = sum(1 for r in fm for x in r["s"] if x == 5)
+ts_comp = sum(t["completed"] for t in dd["topicStatus"])
+chk("flwMatrix completed cells == Σ topicStatus completed", m_comp == ts_comp, f"{m_comp} == {ts_comp}")
+m_start = sum(1 for r in fm for x in r["s"] if x in (4, 5))
+ts_start = sum(t["started-not-completed"] + t["completed"] for t in dd["topicStatus"])
+chk("flwMatrix started cells == Σ topicStatus (started+completed)", m_start == ts_start, f"{m_start} == {ts_start}")
+
+di = dd.get("deimpact", {})
+fmap2 = defaultdict(dict)
+for f in dd["funnel"]:
+    fmap2[f["sg"]][f["n"]] = f
+di_bad = 0
+for sg, info in di.items():
+    if len(bm.SUBGROUP_DESIGN[sg]["topics"]) < 3:
+        di_bad += 1  # de-impact must never apply to 2-interview subgroups
+    last = fmap2[sg][info["last_n"]]
+    if last["started_di"] != last["started"] - info["count"]:
+        di_bad += 1
+chk("deimpact: last started_di == started − count; only >=3-interview subgroups", di_bad == 0, f"{di_bad} bad; sgs={sorted(di)}")
+dq_bad = 0
+for f in dd["funnel"]:
+    if f["started_di"] > f["started"] or f["pct_started_di"] != round(100 * f["started_di"] / f["elig"], 1):
+        dq_bad += 1
+chk("funnel started_di<=started & pct_started_di consistent (all rows)", dq_bad == 0, f"{dq_bad} bad")
+ldi_bad = 0
+for sg in SG_ORDER:
+    for i, p in enumerate(ls[sg].get("pts_di", [])):
+        if fmap2[sg][i + 1]["pct_started_di"] != p:
+            ldi_bad += 1
+chk("lineSeries pts_di == funnel pct_started_di", ldi_bad == 0, f"{ldi_bad} mismatched points")
+cb_bad = sum(1 for f in dd["funnel"] if f["pct_completed_base"] != round(100 * f["completed"] / f["elig"], 1))
+chk("funnel pct_completed_base == 100*completed/eligible (all rows)", cb_bad == 0, f"{cb_bad} bad")
+
+print("=" * 80)
 n_pass = sum(results)
 n_tot = len(results)
 print(f"  TOTAL: {n_pass}/{n_tot} checks passed")
