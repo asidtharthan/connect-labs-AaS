@@ -28,6 +28,12 @@ function WorkflowUI(props) {
   var gSearch = gss[0], setGSearch = gss[1];   // granular session search box
   var gpp = React.useState(0);
   var gPage = gpp[0], setGPage = gpp[1];   // granular page
+  var gvw = React.useState("sessions");
+  var gView = gvw[0], setGView = gvw[1];   // granular sub-view: sessions | matrix (FLW × Topic)
+  var gf1 = React.useState(""); var fSg = gf1[0], setFSg = gf1[1];   // filter: subgroup
+  var gf2 = React.useState(""); var fCo = gf2[0], setFCo = gf2[1];   // filter: cohort
+  var gf3 = React.useState(""); var fSt = gf3[0], setFSt = gf3[1];   // filter: status (state)
+  var gf4 = React.useState(""); var fTr = gf4[0], setFTr = gf4[1];   // filter: trained | untrained
   var lineRef = React.useRef(null), lineInst = React.useRef(null);
   var barRef = React.useRef(null), barInst = React.useRef(null);
 
@@ -71,6 +77,9 @@ function WorkflowUI(props) {
     );
   }
   var SG_COLOR = { "TRS": "#6366f1", "TRE": "#0ea5e9", "ABT1-A": "#f59e0b", "ABT1-B": "#ef4444", "ABT2-A": "#10b981", "ABT2-B": "#8b5cf6" };
+  // FLW × Topic matrix cell glyphs, indexed by STATES order (0 not-applicable … 5 completed)
+  var CELL_GLYPH = ["", "·", "○", "!", "◐", "✓"];
+  var MATRIX_TOPIC_ORDER = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"];
 
   var th = "px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider";
   var td = "px-3 py-2 whitespace-nowrap text-sm text-gray-800";
@@ -169,15 +178,47 @@ function WorkflowUI(props) {
           completed: r.is_completed, created_at: "", session_id: r.session_id };
       });
   var gq = gSearch.trim().toLowerCase();
-  var sessFiltered = gq
-    ? sessSource.filter(function (r) {
-        return (r.connect_id + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) >= 0;
-      })
-    : sessSource;
+  // ---- per-(FLW × cohort) × topic matrix + a connect_id lookup for filtering both tables ----
+  var FM = DATA.flwMatrix || [];
+  var flwInfo = {};   // connect_id -> { g: subgroup, cohorts: {cohort:1}, u: untrained }
+  FM.forEach(function (r) {
+    var fi = flwInfo[r.f] || (flwInfo[r.f] = { g: r.g, cohorts: {}, u: 0 });
+    fi.cohorts[r.c] = 1; if (r.u) fi.u = 1;
+  });
+  var fSubgroups = SG_ORDER.filter(function (sg) { return FM.some(function (r) { return r.g === sg; }); });
+  var fCohorts = Object.keys(FM.reduce(function (a, r) { a[r.c] = 1; return a; }, {})).sort();
+  var MTOPICS = MATRIX_TOPIC_ORDER.filter(function (t) {
+    return fSubgroups.some(function (sg) { return (SUBGROUP_DESIGN[sg] || []).indexOf(t) >= 0; });
+  });
+  var anyFilter = !!(fSg || fCo || fSt || fTr || gq);
+  function clearFilters() { setGSearch(""); setFSg(""); setFCo(""); setFSt(""); setFTr(""); setGPage(0); }
+  // Sessions table: filter live OCS rows via the FLW lookup (cohort filter is by the FLW's cohort,
+  // since a session isn't bound to one cohort) + status from the row itself.
+  var sessFiltered = sessSource.filter(function (r) {
+    if (gq && (r.connect_id + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
+    var fi = flwInfo[r.connect_id];
+    if (fSg && (!fi || fi.g !== fSg)) return false;
+    if (fCo && (!fi || !fi.cohorts[fCo])) return false;
+    if (fTr && (!fi || (fTr === "untrained" ? !fi.u : fi.u))) return false;
+    if (fSt) { var st = r.completed ? "completed" : (r.started ? "started-not-completed" : ""); if (st !== fSt) return false; }
+    return true;
+  });
+  // FLW × Topic matrix rows: row-level filters; status filter = FLW has >=1 topic in that state.
+  var fStIdx = fSt ? STATES.indexOf(fSt) : -1;
+  var matFiltered = FM.filter(function (r) {
+    if (gq && (r.f + " " + r.c).toLowerCase().indexOf(gq) < 0) return false;
+    if (fSg && r.g !== fSg) return false;
+    if (fCo && r.c !== fCo) return false;
+    if (fTr && (fTr === "untrained" ? !r.u : r.u)) return false;
+    if (fStIdx >= 0 && r.s.indexOf(fStIdx) < 0) return false;
+    return true;
+  });
   var GPAGE = 100;
-  var gPages = Math.max(1, Math.ceil(sessFiltered.length / GPAGE));
+  var activeLen = gView === "matrix" ? matFiltered.length : sessFiltered.length;
+  var gPages = Math.max(1, Math.ceil(activeLen / GPAGE));
   var gPageC = Math.min(gPage, gPages - 1);
   var sessPageRows = sessFiltered.slice(gPageC * GPAGE, gPageC * GPAGE + GPAGE);
+  var matPageRows = matFiltered.slice(gPageC * GPAGE, gPageC * GPAGE + GPAGE);
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm p-5">
@@ -315,38 +356,107 @@ function WorkflowUI(props) {
 
             {tableSub === "granular" && (
               <div>
-                <div className="flex items-center gap-2 px-1 py-2">
-                  <input type="text" value={gSearch} placeholder="Search connect_id / session / interview / status…"
+                <div className="flex flex-wrap items-center gap-2 px-1 py-2">
+                  {subBtn(gView, "sessions", function (v) { setGView(v); setGPage(0); }, "Sessions")}
+                  {subBtn(gView, "matrix", function (v) { setGView(v); setGPage(0); }, "FLW × Topic")}
+                  <span className="mx-1 text-gray-300">|</span>
+                  <input type="text" value={gSearch} placeholder={gView === "matrix" ? "Search connect_id / cohort…" : "Search connect_id / session / interview / status…"}
                     onChange={function (e) { setGSearch(e.target.value); setGPage(0); }}
-                    className="border border-gray-300 rounded-md px-3 py-1.5 text-sm" style={{ width: "24rem" }} />
-                  <span className="text-xs text-gray-500">
-                    {sessFiltered.length} sessions{ocsLive.length ? " (live OCS)" : " (embedded sample — live pipeline not loaded)"}{gq ? " matching" : ""}
-                  </span>
+                    className="border border-gray-300 rounded-md px-3 py-1.5 text-sm" style={{ width: "18rem" }} />
+                  <select value={fSg} onChange={function (e) { setFSg(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                    <option value="">All subgroups</option>
+                    {fSubgroups.map(function (sg) { return <option key={sg} value={sg}>{sg}</option>; })}
+                  </select>
+                  <select value={fCo} onChange={function (e) { setFCo(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                    <option value="">All cohorts</option>
+                    {fCohorts.map(function (co) { return <option key={co} value={co}>{co}</option>; })}
+                  </select>
+                  <select value={fSt} onChange={function (e) { setFSt(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                    <option value="">All statuses</option>
+                    {STATES5.map(function (s) { return <option key={s} value={s}>{STATE_LABEL[s]}</option>; })}
+                  </select>
+                  <select value={fTr} onChange={function (e) { setFTr(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                    <option value="">All FLWs</option>
+                    <option value="trained">Trained</option>
+                    <option value="untrained">Untrained</option>
+                  </select>
+                  {anyFilter ? <button onClick={clearFilters} className="px-2 py-1.5 text-xs text-indigo-600 hover:underline">Clear</button> : null}
                 </div>
-                <div className="overflow-x-auto" style={{ maxHeight: "65vh" }}>
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0"><tr>
-                      {["connect_id", "interview", "status", "created", "session"].map(function (h) {
-                        return <th key={h} className={th + " text-left"}>{h}</th>;
+
+                {gView === "sessions" && (
+                  <div>
+                    <div className="px-1 pb-2 text-xs text-gray-500">
+                      {sessFiltered.length} sessions{ocsLive.length ? " (live OCS)" : " (embedded sample — live pipeline not loaded)"}{anyFilter ? " matching" : ""}
+                    </div>
+                    <div className="overflow-x-auto" style={{ maxHeight: "65vh" }}>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0"><tr>
+                          {["connect_id", "interview", "status", "created", "session"].map(function (h) {
+                            return <th key={h} className={th + " text-left"}>{h}</th>;
+                          })}
+                        </tr></thead>
+                        <tbody className="bg-white divide-y divide-gray-100">
+                          {sessPageRows.map(function (r, idx) {
+                            var label = r.completed ? "Completed" : (r.started ? "Started" : "—");
+                            var cls = r.completed ? "text-green-700 font-medium" : (r.started ? "text-lime-700" : "text-gray-400");
+                            return (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className={td + " font-mono text-xs"}>{r.connect_id}</td>
+                                <td className={td}>{r.interview || "—"}</td>
+                                <td className={td + " " + cls}>{label}</td>
+                                <td className={td + " text-gray-500"}>{r.created_at || "—"}</td>
+                                <td className={td + " font-mono text-xs"}>{r.session_id ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + r.session_id + "/view/"} target="_blank" rel="noopener noreferrer" title={r.session_id} className="text-indigo-600 hover:underline">view ↗</a> : ""}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {gView === "matrix" && (
+                  <div>
+                    <div className="px-1 pb-1 text-xs text-gray-500">
+                      {matFiltered.length} FLW×cohort rows{anyFilter ? " matching" : ""} · one row per claimed FLW, one column per topic — hover a cell for its status.
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 px-1 pb-2 text-xs text-gray-500">
+                      {STATES5.map(function (s) {
+                        return <span key={s} className="inline-flex items-center gap-1"><span style={{ display: "inline-block", width: 11, height: 11, background: STATE_COLOR[s], borderRadius: 2 }}></span>{CELL_GLYPH[STATES.indexOf(s)]} {STATE_LABEL[s]}</span>;
                       })}
-                    </tr></thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
-                      {sessPageRows.map(function (r, idx) {
-                        var label = r.completed ? "Completed" : (r.started ? "Started" : "—");
-                        var cls = r.completed ? "text-green-700 font-medium" : (r.started ? "text-lime-700" : "text-gray-400");
-                        return (
-                          <tr key={idx} className="hover:bg-gray-50">
-                            <td className={td + " font-mono text-xs"}>{r.connect_id}</td>
-                            <td className={td}>{r.interview || "—"}</td>
-                            <td className={td + " " + cls}>{label}</td>
-                            <td className={td + " text-gray-500"}>{r.created_at || "—"}</td>
-                            <td className={td + " font-mono text-xs"}>{r.session_id ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + r.session_id + "/view/"} target="_blank" rel="noopener noreferrer" title={r.session_id} className="text-indigo-600 hover:underline">view ↗</a> : ""}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                    <div className="overflow-x-auto" style={{ maxHeight: "65vh" }}>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0"><tr>
+                          <th className={th + " text-left"}>connect_id</th>
+                          <th className={th + " text-left"}>cohort</th>
+                          <th className={th + " text-left"}>subgroup</th>
+                          {MTOPICS.map(function (t) { return <th key={t} className={th + " text-center"} title={TOPIC_NAMES[t] || t}>{t}</th>; })}
+                        </tr></thead>
+                        <tbody className="bg-white divide-y divide-gray-100">
+                          {matPageRows.map(function (r, idx) {
+                            var topics = SUBGROUP_DESIGN[r.g] || [];
+                            var cb = {}; topics.forEach(function (t, i) { cb[t] = r.s[i]; });
+                            return (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className={td + " font-mono text-xs"}>{r.f}{r.u ? <span title="Untrained FLW" className="ml-1 text-amber-600">⚑</span> : null}</td>
+                                <td className={td}>{r.c}</td>
+                                <td className={td + " text-gray-500"}>{r.g}</td>
+                                {MTOPICS.map(function (t) {
+                                  if (!(t in cb)) return <td key={t} className="px-2 py-1 text-center text-gray-200">·</td>;
+                                  var code = cb[t];
+                                  return <td key={t} className="px-2 py-1 text-center text-xs" title={(TOPIC_NAMES[t] || t) + " — " + STATE_LABEL[STATES[code]]}
+                                    style={{ backgroundColor: rgbaOf(STATE_COLOR[STATES[code]], 0.85), color: "#fff" }}>{CELL_GLYPH[code]}</td>;
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3 px-1 py-2 text-sm">
                   <button onClick={function () { setGPage(Math.max(0, gPageC - 1)); }} disabled={gPageC <= 0}
                     className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40">‹ Prev</button>
@@ -613,6 +723,77 @@ function WorkflowUI(props) {
                       );
                     }
                     return rows;
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-x-auto">
+              <h3 className="text-sm font-semibold text-gray-700 px-1 py-1">Full retention table — Connect funnel → every interview (one row per subgroup)</h3>
+              <p className="text-xs text-gray-400 px-1">GW "Retention Drop-off" layout. Eligible = # Initiated (constant retention base). % Triggered / % Started = ÷ Eligible; % Compl = ÷ Started; <b>%init</b> = Completed ÷ Eligible (completion as a share of everyone who initiated).</p>
+              <table className="min-w-full border border-gray-200 text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className={th + " text-left"} rowSpan={2}>Subgroup</th>
+                    <th className={th + " text-right"} rowSpan={2}>Cohorts</th>
+                    <th className={th + " text-right"} rowSpan={2}>Invited</th>
+                    <th className={th + " text-right"} rowSpan={2}>Accepted</th>
+                    <th className={th + " text-right"} rowSpan={2}>Started Learn</th>
+                    <th className={th + " text-right"} rowSpan={2}>Compl. Learn</th>
+                    <th className={th + " text-right"} rowSpan={2}>Claimed</th>
+                    <th className={th + " text-right"} rowSpan={2}>FLW Reg</th>
+                    <th className={th + " text-right border-r border-gray-300"} rowSpan={2}># Initiated</th>
+                    {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                      return <th key={i} className={th + " text-center border-l border-gray-200"} colSpan={6}>Interview {i + 1}</th>;
+                    })}
+                  </tr>
+                  <tr>
+                    {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                      return [
+                        <th key={i + "t"} className={th + " text-left border-l border-gray-200"}>Topic</th>,
+                        <th key={i + "e"} className={th + " text-right"}>Elig</th>,
+                        <th key={i + "tr"} className={th + " text-right"}>Trig/%</th>,
+                        <th key={i + "s"} className={th + " text-right"}>Start/%</th>,
+                        <th key={i + "c"} className={th + " text-right"}>Compl/%</th>,
+                        <th key={i + "ci"} className={th + " text-right"}>%init</th>,
+                      ];
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {DATA.dropoff.subgroups.map(function (s) {
+                    var cn = s.connect, byN = {};
+                    s.interviews.forEach(function (iv) { byN[iv.n] = iv; });
+                    return (
+                      <tr key={s.sg} className="hover:bg-gray-50">
+                        <td className={td + " font-medium"}>{s.sg}</td>
+                        <td className={td + " text-right text-gray-500"}>{s.cohorts_n}</td>
+                        <td className={td + " text-right"}>{cn.invited}</td>
+                        <td className={td + " text-right"}>{cn.accepted}</td>
+                        <td className={td + " text-right"}>{cn.learn_started}</td>
+                        <td className={td + " text-right"}>{cn.learn_completed}</td>
+                        <td className={td + " text-right"}>{cn.claimed}</td>
+                        <td className={td + " text-right"}>{cn.flw_reg}</td>
+                        <td className={td + " text-right font-medium border-r border-gray-300"}>{cn.initiated}</td>
+                        {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                          var iv = byN[i + 1];
+                          if (!iv) return [
+                            <td key={i + "t"} className={td + " text-gray-200 border-l border-gray-200"}>—</td>,
+                            <td key={i + "e"} className={td}></td>, <td key={i + "tr"} className={td}></td>,
+                            <td key={i + "s"} className={td}></td>, <td key={i + "c"} className={td}></td>,
+                            <td key={i + "ci"} className={td}></td>,
+                          ];
+                          return [
+                            <td key={i + "t"} className={td + " border-l border-gray-200"} title={iv.name}>{iv.topic}</td>,
+                            <td key={i + "e"} className={td + " text-right text-gray-500"}>{iv.eligible}</td>,
+                            <td key={i + "tr"} className={td + " text-right"}>{iv.triggered} <span className="text-gray-400">{iv.pct_trig}%</span></td>,
+                            <td key={i + "s"} className={td + " text-right"}>{iv.started} <span className="text-gray-400">{iv.pct_started}%</span></td>,
+                            <td key={i + "c"} className={td + " text-right text-green-700"}>{iv.completed} <span className="text-gray-400">{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</span></td>,
+                            <td key={i + "ci"} className={td + " text-right text-gray-500"}>{iv.pct_completed_base == null ? "—" : iv.pct_completed_base + "%"}</td>,
+                          ];
+                        })}
+                      </tr>
+                    );
                   })}
                 </tbody>
               </table>

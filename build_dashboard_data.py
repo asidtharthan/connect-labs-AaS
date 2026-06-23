@@ -4,7 +4,9 @@ Adds: counts, connectFunnel (per subgroup), lineSeries bases, topicStatus reshap
 Run build_payload_agg.py first. Then audit with build_dashboard_data_audit.py.
 """
 import json
+import os
 from collections import defaultdict
+from datetime import date as _date, timedelta as _timedelta
 
 import build_master_4src as bm
 
@@ -120,6 +122,64 @@ for r in rows_sorted[:GRANULAR_N]:
         }
     )
 
+# ---- per-(FLW × cohort) × topic status matrix (item 4: "FLW × Topic" granular table) ----
+# Reuses the SAME status logic as topicStatus, so the matrix reconciles to the stacked bar.
+# Universe = claimed FLWs per cohort (the topic-completion denominator). Cells are state indices
+# aligned to SUBGROUP_DESIGN[sg] topic order. Short keys keep the embed small (verified well under
+# the 512 KB render limit). `u` (untrained) is filled from _untrained_flw.json when present (item 1).
+_TODAY = _date.today()
+_STATE_IDX = {s: i for i, s in enumerate(
+    ["not-applicable", "not-available-yet", "available-not-started",
+     "available-missed-overdue", "started-not-completed", "completed"])}
+_untrained = {}
+if os.path.exists("_untrained_flw.json"):
+    _untrained = json.load(open("_untrained_flw.json", encoding="utf-8"))
+
+_mlook = {}
+
+
+def _mrank(r):
+    return (1 if r["is_completed"] == "Y" else 0) * 2 + (1 if r["is_started"] == "Y" else 0)
+
+
+for _r in bm.rows:
+    _k = (_r["connect_id"], _r["cohort_id"], _r["topic_code"])
+    if _k not in _mlook or _mrank(_r) > _mrank(_mlook[_k]):
+        _mlook[_k] = _r
+
+
+def _status_idx(flw, cohort, sg, topic, topics):
+    if topic not in topics:
+        return 0  # not-applicable
+    n = topics.index(topic) + 1
+    m = _mlook.get((flw, cohort, topic))
+    if m and m["is_completed"] == "Y":
+        return _STATE_IDX["completed"]
+    if m and m["is_started"] == "Y":
+        return _STATE_IDX["started-not-completed"]
+    td = bm.cohort_info.get(cohort, {}).get("training_date")
+    if not td:
+        return _STATE_IDX["available-not-started"]
+    cad = bm.SUBGROUP_DESIGN[sg]["cadence"]
+    if _TODAY < td + _timedelta(days=(n - 1) * cad):
+        return _STATE_IDX["not-available-yet"]
+    if n < len(topics) and _TODAY >= td + _timedelta(days=n * cad):
+        return _STATE_IDX["available-missed-overdue"]
+    return _STATE_IDX["available-not-started"]
+
+
+flw_matrix = []
+for _cohort, _info in bm.cohort_info.items():
+    _sg = _info["subgroup"]
+    _topics = bm.SUBGROUP_DESIGN[_sg]["topics"]
+    _claimed = [f for f in bm.cohort_flws[_cohort] if bm.cohort_flw_meta[(_cohort, f)].get("date_claimed")]
+    for _flw in _claimed:
+        flw_matrix.append({
+            "f": _flw, "c": _cohort, "g": _sg,
+            "u": 1 if _untrained.get(_flw) else 0,
+            "s": [_status_idx(_flw, _cohort, _sg, t, _topics) for t in _topics],
+        })
+
 out = {
     "built_at": payload.get("built_at", ""),
     "today": payload.get("today", ""),
@@ -135,6 +195,7 @@ out = {
     "dropoff": payload["dropoff"],
     "granular": granular,
     "granular_total": len(bm.rows),
+    "flwMatrix": flw_matrix,
     "unmappedCohorts": payload.get("unmapped_cohorts", []),
 }
 s = json.dumps(out, separators=(",", ":"))
