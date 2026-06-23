@@ -60,15 +60,58 @@ for c in cells:
         f["s"].add(c["flw"])
     if c["c"]:
         f["c"].add(c["flw"])
+
+# ---- penult/last back-to-back artifact: "did-last-only" de-impacted starts (item 8) ----
+# Some subgroups trigger the last two interviews back-to-back (~0-day gap); a set of FLWs engage
+# ONLY the last (skipping the penultimate), inflating the last interview's %Started and masking the
+# true decline. did_last_only = started(last) − started(penult); the de-impacted series removes those
+# from the LAST interview's STARTED numerator (eligible base unchanged). Gated by the median
+# penult→last TRIGGER gap (<1 day) so it auto-applies to PANEL/ABT3 only if they're back-to-back.
+
+def _median(xs):
+    xs = sorted(xs)
+    n = len(xs)
+    if not n:
+        return None
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+DEIMPACT_GAP_DAYS = 1.0
+deimpact = {}   # sg -> {"last_n": int, "count": int}
+for sg in SG_PRESENT:
+    topics = bm.SUBGROUP_DESIGN[sg]["topics"]
+    if len(topics) < 3:   # 2-interview subgroups: normal-cadence non-sequential takers, not artifacts
+        continue
+    last_n, pen_n = len(topics), len(topics) - 1
+    last_top, pen_top = topics[-1], topics[-2]
+    started_last, started_pen = fset[(sg, last_n)]["s"], fset[(sg, pen_n)]["s"]
+    did_last_only = started_last - started_pen
+    if not did_last_only:
+        continue
+    gaps = []
+    for flw in (started_last | started_pen):
+        pt = bm.triggers_by_flw_iv.get((flw, pen_top))
+        lt = bm.triggers_by_flw_iv.get((flw, last_top))
+        if pt and lt:
+            gaps.append(abs((lt[0]["received_on"] - pt[0]["received_on"]).total_seconds()) / 86400.0)
+    med = _median(gaps)
+    if med is not None and med < DEIMPACT_GAP_DAYS:
+        deimpact[sg] = {"last_n": last_n, "count": len(did_last_only)}
+print(f"[8] de-impact (penult/last artifact): {sum(d['count'] for d in deimpact.values())} FLWs across {sorted(deimpact)}")
+
 funnel = []
 line = {}
+line_di = {}
 for sg in SG_PRESENT:
     elig = len(elig_sg[sg]) or 1
+    di = deimpact.get(sg)
     series = []
+    series_di = []
     for i, tc in enumerate(bm.SUBGROUP_DESIGN[sg]["topics"]):
         n = i + 1
         f = fset[(sg, n)]
         t, s, cc = len(f["t"]), len(f["s"]), len(f["c"])
+        s_di = s - di["count"] if (di and n == di["last_n"]) else s
         funnel.append(
             {
                 "sg": sg,
@@ -85,10 +128,15 @@ for sg in SG_PRESENT:
                 # completion as a share of the INITIATED base (retention), not of this interview's
                 # starters — for the "pay per interview" / full retention table (Screenshot 104).
                 "pct_completed_base": round(100 * cc / elig, 1),
+                # de-impacted started (penult/last artifact removed from the LAST interview only)
+                "started_di": s_di,
+                "pct_started_di": round(100 * s_di / elig, 1),
             }
         )
         series.append(round(100 * s / elig, 1))
+        series_di.append(round(100 * s_di / elig, 1))
     line[sg] = series
+    line_di[sg] = series_di
 
 
 # ---- Tables 1-3 ----
@@ -237,19 +285,21 @@ for r in bm.rows:
         coh_fset[key]["c"].add(r["connect_id"])
 
 
-def _iv_blocks(topics, init_set, fget):
+def _iv_blocks(topics, init_set, fget, di_n=None, di_ct=0):
     base = len(init_set) or 1
     out = []
     for i, tc in enumerate(topics):
         n = i + 1
         f = fget(n)
         t, s, c = len(f["t"]), len(f["s"]), len(f["c"])
+        s_di = s - di_ct if (di_n is not None and n == di_n and di_ct) else s
         out.append({
             "n": n, "topic": tc, "name": bm.TOPIC_NAMES[tc],
             "eligible": len(init_set), "triggered": t, "pct_trig": round(100 * t / base, 1),
             "started": s, "pct_started": round(100 * s / base, 1),
             "completed": c, "pct_completed": round(100 * c / s, 1) if s else None,
             "pct_completed_base": round(100 * c / base, 1),  # completed / initiated base (retention)
+            "started_di": s_di, "pct_started_di": round(100 * s_di / base, 1),  # de-impacted (item 8)
         })
     return out
 
@@ -267,7 +317,8 @@ for sg in SG_PRESENT:
     cohorts_n = sum(1 for c in bm.cohort_info if bm.cohort_info[c]["subgroup"] == sg)
     dropoff_sg.append({
         "sg": sg, "cohorts_n": cohorts_n, "connect": connect,
-        "interviews": _iv_blocks(bm.SUBGROUP_DESIGN[sg]["topics"], init, lambda n, _sg=sg: fset[(_sg, n)]),
+        "interviews": _iv_blocks(bm.SUBGROUP_DESIGN[sg]["topics"], init, lambda n, _sg=sg: fset[(_sg, n)],
+                                 di_n=deimpact.get(sg, {}).get("last_n"), di_ct=deimpact.get(sg, {}).get("count", 0)),
     })
 
 dropoff_cohorts = defaultdict(list)
@@ -313,6 +364,8 @@ payload = {
     },
     "funnel": funnel,
     "line_pct_started": line,
+    "line_pct_started_di": line_di,   # de-impacted %started series (item 8)
+    "deimpact": deimpact,             # {sg: {last_n, count}} penult/last artifact summary
     "table1": t1,
     "table2": t2,
     "table3": t3,
