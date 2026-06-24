@@ -34,6 +34,8 @@ function WorkflowUI(props) {
   var gf2 = React.useState(""); var fCo = gf2[0], setFCo = gf2[1];   // filter: cohort
   var gf3 = React.useState(""); var fSt = gf3[0], setFSt = gf3[1];   // filter: status (state)
   var gf4 = React.useState(""); var fTr = gf4[0], setFTr = gf4[1];   // filter: trained | untrained
+  var gf5 = React.useState(""); var fTopic = gf5[0], setFTopic = gf5[1];   // filter: topic (interview code)
+  var gso = React.useState({ key: "", dir: "asc" }); var gSort = gso[0], setGSort = gso[1];   // sessions table sort
   var dimp = React.useState(false);
   var deImpact = dimp[0], setDeImpact = dimp[1];   // item 8: raw vs de-impacted (penult/last artifact)
   var lineRef = React.useRef(null), lineInst = React.useRef(null);
@@ -257,8 +259,8 @@ function WorkflowUI(props) {
   var MTOPICS = MATRIX_TOPIC_ORDER.filter(function (t) {
     return fSubgroups.some(function (sg) { return (SUBGROUP_DESIGN[sg] || []).indexOf(t) >= 0; });
   });
-  var anyFilter = !!(fSg || fCo || fSt || fTr || gq);
-  function clearFilters() { setGSearch(""); setFSg(""); setFCo(""); setFSt(""); setFTr(""); setGPage(0); }
+  var anyFilter = !!(fSg || fCo || fSt || fTr || fTopic || gq);
+  function clearFilters() { setGSearch(""); setFSg(""); setFCo(""); setFSt(""); setFTr(""); setFTopic(""); setGPage(0); }
   // Sessions table: filter live OCS rows via the FLW lookup (cohort filter is by the FLW's cohort,
   // since a session isn't bound to one cohort) + status from the row itself.
   var sessFiltered = sessSource.filter(function (r) {
@@ -267,6 +269,7 @@ function WorkflowUI(props) {
     if (fSg && (!fi || fi.g !== fSg)) return false;
     if (fCo && (!fi || !fi.cohorts[fCo])) return false;
     if (fTr && (!fi || (fTr === "untrained" ? !fi.u : fi.u))) return false;
+    if (fTopic && String(r.interview) !== fTopic) return false;
     if (fSt) { var st = r.completed ? "completed" : (r.started ? "started-not-completed" : ""); if (st !== fSt) return false; }
     return true;
   });
@@ -277,14 +280,41 @@ function WorkflowUI(props) {
     if (fSg && r.g !== fSg) return false;
     if (fCo && r.c !== fCo) return false;
     if (fTr && (fTr === "untrained" ? !r.u : r.u)) return false;
-    if (fStIdx >= 0 && r.s.indexOf(fStIdx) < 0) return false;
+    if (fTopic) {
+      var ti = (SUBGROUP_DESIGN[r.g] || []).indexOf(fTopic);
+      if (ti < 0) return false;                              // FLW's subgroup doesn't run this topic
+      if (fStIdx >= 0 && r.s[ti] !== fStIdx) return false;   // that topic must be in the chosen state
+    } else if (fStIdx >= 0 && r.s.indexOf(fStIdx) < 0) return false;
     return true;
   });
+  // ---- sessions sort (click a column header) ----
+  function sortVal(r, key) {
+    if (key === "interview") { var n = Number(r.interview); return isNaN(n) ? r.interview || "" : n; }
+    if (key === "status") return r.completed ? 2 : r.started ? 1 : 0;   // ordinal: completed > started > none
+    if (key === "created") return r.created_at || "";
+    return r.connect_id || "";
+  }
+  var sessSorted = gSort.key
+    ? sessFiltered.slice().sort(function (a, b) {
+        var va = sortVal(a, gSort.key), vb = sortVal(b, gSort.key);
+        var c = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+        return gSort.dir === "asc" ? c : -c;
+      })
+    : sessFiltered;
+  function sortTh(label, key) {
+    var active = gSort.key === key;
+    return (
+      <th key={label} onClick={function () { setGSort(active ? { key: key, dir: gSort.dir === "asc" ? "desc" : "asc" } : { key: key, dir: key === "created" ? "desc" : "asc" }); setGPage(0); }}
+        className={th + " text-left cursor-pointer select-none hover:text-indigo-600"} title="Click to sort">
+        {label}<span className={"ml-1 " + (active ? "text-indigo-600" : "text-gray-300")}>{active ? (gSort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
+      </th>
+    );
+  }
   var GPAGE = 100;
   var activeLen = gView === "matrix" ? matFiltered.length : sessFiltered.length;
   var gPages = Math.max(1, Math.ceil(activeLen / GPAGE));
   var gPageC = Math.min(gPage, gPages - 1);
-  var sessPageRows = sessFiltered.slice(gPageC * GPAGE, gPageC * GPAGE + GPAGE);
+  var sessPageRows = sessSorted.slice(gPageC * GPAGE, gPageC * GPAGE + GPAGE);
   var matPageRows = matFiltered.slice(gPageC * GPAGE, gPageC * GPAGE + GPAGE);
   return (
     <div className="space-y-4">
@@ -438,6 +468,10 @@ function WorkflowUI(props) {
                     <option value="">All cohorts</option>
                     {fCohorts.map(function (co) { return <option key={co} value={co}>{co}</option>; })}
                   </select>
+                  <select value={fTopic} onChange={function (e) { setFTopic(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" title="Filter by interview topic">
+                    <option value="">All topics</option>
+                    {MTOPICS.map(function (t) { return <option key={t} value={t}>{t} · {TOPIC_NAMES[t] || t}</option>; })}
+                  </select>
                   <select value={fSt} onChange={function (e) { setFSt(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
                     <option value="">All statuses</option>
                     {STATES5.map(function (s) { return <option key={s} value={s}>{STATE_LABEL[s]}</option>; })}
@@ -458,9 +492,11 @@ function WorkflowUI(props) {
                     <div className="overflow-x-auto" style={{ maxHeight: "65vh" }}>
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 sticky top-0"><tr>
-                          {["connect_id", "interview", "status", "created", "session"].map(function (h) {
-                            return <th key={h} className={th + " text-left"}>{h}</th>;
-                          })}
+                          {sortTh("connect_id", "connect_id")}
+                          {sortTh("interview", "interview")}
+                          {sortTh("status", "status")}
+                          {sortTh("created", "created")}
+                          <th className={th + " text-left"}>session</th>
                         </tr></thead>
                         <tbody className="bg-white divide-y divide-gray-100">
                           {sessPageRows.map(function (r, idx) {
