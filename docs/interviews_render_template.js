@@ -514,7 +514,7 @@ function WorkflowUI(props) {
                                   var code = cb[t];
                                   var _sid = sessByKey[r.f + "|" + t];
                                   var _cell = _sid
-                                    ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + _sid + "/view/"} target="_blank" rel="noopener noreferrer" style={{ color: "#fff", fontWeight: 700, textDecoration: "none" }}>{CELL_GLYPH[code]}<span style={{ fontSize: "9px", verticalAlign: "super", opacity: 0.9 }}>↗</span></a>
+                                    ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + _sid + "/view/"} target="_blank" rel="noopener noreferrer" style={{ color: "#fff", fontWeight: 700, textDecoration: "none" }}>{CELL_GLYPH[code]}<span style={{ fontSize: "10px", verticalAlign: "super", color: "#38bdf8", fontWeight: 700 }}>↗</span></a>
                                     : CELL_GLYPH[code];
                                   return <td key={t} className={"px-2 py-1 text-center text-xs" + (_sid ? " cursor-pointer" : "")} title={(TOPIC_NAMES[t] || t) + " — " + STATE_LABEL[STATES[code]] + (_sid ? " · click ↗ to open the OCS session" : "")}
                                     style={{ backgroundColor: rgbaOf(STATE_COLOR[STATES[code]], 0.85), color: "#fff" }}>{_cell}</td>;
