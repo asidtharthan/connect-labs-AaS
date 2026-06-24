@@ -246,6 +246,9 @@ def main():
         # untrained_flw lives on the commcare-user usercase (Case API), headless via HQ key.
         # non-critical: if it fails, the build degrades gracefully (everyone defaults to trained).
         run("1b. pull HQ user cases (untrained_flw)", [PY, "pull_hq_user_cases.py"], required=False)
+        # interview cadence + topic sequence from the interview_schedule lookup (bot's runtime truth).
+        # non-critical: if it fails, the build falls back to the hardcoded design.
+        run("1c. pull HQ interview schedule (cadence/topics)", [PY, "pull_hq_interview_schedule.py"], required=False)
     else:
         print("\n=== 1. pull HQ: skipped (using existing hq_pull_full/) ===", flush=True)
     if args.pull_ocs:

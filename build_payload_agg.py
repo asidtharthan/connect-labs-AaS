@@ -9,7 +9,10 @@ from datetime import date, datetime, timedelta, timezone
 import build_master_4src as bm
 
 TODAY = date.today()  # drives status time-gating; dynamic so the daily job gates against the real date
-TOPICS = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]
+# Canonical topic order; include every topic ANY subgroup design uses (auto-picks up 12/13/C from the
+# CCHQ-derived schedule) so topic-completion never silently drops a topic the bot actually runs.
+_CANON_TOPICS = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "F", "G"]
+TOPICS = [t for t in _CANON_TOPICS if any(t in bm.SUBGROUP_DESIGN[sg]["topics"] for sg in bm.SUBGROUP_DESIGN)]
 SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "PANEL", "ABT3-A", "ABT3-B"]
 ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2",
         "PANEL": "PANEL", "ABT3-A": "ABT3", "ABT3-B": "ABT3"}
@@ -99,19 +102,56 @@ for sg in SG_PRESENT:
         deimpact[sg] = {"last_n": last_n, "count": len(did_last_only)}
 print(f"[8] de-impact (penult/last artifact): {sum(d['count'] for d in deimpact.values())} FLWs across {sorted(deimpact)}")
 
+# ---- per-(subgroup, interview) release status (items A1/A2): not-available / in-progress / settled ----
+# Uses per-cohort training dates + the CCHQ schedule offsets so "not yet offered" interviews (e.g. the
+# later PANEL ones) are distinguished from genuine drop-off. Aggregated across a subgroup's cohorts:
+#   not-available = no cohort has reached this interview's release date yet (don't plot — avoids a false 0%)
+#   in-progress   = released for some, but the NEXT interview isn't released for all (still accumulating)
+#   settled       = the next interview is released for all cohorts (this interview's window has closed)
+_subgroup_cohorts = defaultdict(list)
+for _c, _inf in bm.cohort_info.items():
+    _subgroup_cohorts[_inf["subgroup"]].append(_c)
+
+
+def _offset(cohort, k, sg):
+    sched = bm.cohort_schedule.get(cohort)
+    if sched and 0 <= k - 1 < len(sched):
+        return sched[k - 1]["offset_days"]
+    return (k - 1) * bm.SUBGROUP_DESIGN[sg]["cadence"]
+
+
+def _release_status(sg, n):
+    topics = bm.SUBGROUP_DESIGN[sg]["topics"]
+    cad = bm.SUBGROUP_DESIGN[sg]["cadence"]
+    rel_now, rel_next = [], []
+    for c in _subgroup_cohorts.get(sg, []):
+        td = bm.cohort_info[c].get("training_date")
+        if not td:
+            continue
+        rel_now.append(TODAY >= td + timedelta(days=_offset(c, n, sg)))
+        nxt = _offset(c, n + 1, sg) if n < len(topics) else _offset(c, n, sg) + cad
+        rel_next.append(TODAY >= td + timedelta(days=nxt))
+    if not rel_now or not any(rel_now):
+        return "not-available"
+    return "settled" if all(rel_next) else "in-progress"
+
+
 funnel = []
 line = {}
 line_di = {}
+line_status = {}
 for sg in SG_PRESENT:
     elig = len(elig_sg[sg]) or 1
     di = deimpact.get(sg)
     series = []
     series_di = []
+    statuses = []
     for i, tc in enumerate(bm.SUBGROUP_DESIGN[sg]["topics"]):
         n = i + 1
         f = fset[(sg, n)]
         t, s, cc = len(f["t"]), len(f["s"]), len(f["c"])
         s_di = s - di["count"] if (di and n == di["last_n"]) else s
+        st = _release_status(sg, n)
         funnel.append(
             {
                 "sg": sg,
@@ -131,12 +171,16 @@ for sg in SG_PRESENT:
                 # de-impacted started (penult/last artifact removed from the LAST interview only)
                 "started_di": s_di,
                 "pct_started_di": round(100 * s_di / elig, 1),
+                # release status (not-available / in-progress / settled) for funnel display
+                "status": st,
             }
         )
         series.append(round(100 * s / elig, 1))
         series_di.append(round(100 * s_di / elig, 1))
+        statuses.append(st)
     line[sg] = series
     line_di[sg] = series_di
+    line_status[sg] = statuses
 
 
 # ---- Tables 1-3 ----
@@ -365,6 +409,7 @@ payload = {
     "funnel": funnel,
     "line_pct_started": line,
     "line_pct_started_di": line_di,   # de-impacted %started series (item 8)
+    "line_status": line_status,       # per-point release status (not-available/in-progress/settled)
     "deimpact": deimpact,             # {sg: {last_n, count}} penult/last artifact summary
     "table1": t1,
     "table2": t2,
