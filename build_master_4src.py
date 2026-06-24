@@ -40,16 +40,19 @@ ALL_DOMAINS = [
     "ccc-interview-panel-eha",
 ]
 
-SUBGROUP_DESIGN = {
+# FALLBACK only — the live SUBGROUP_DESIGN is derived from the CommCare HQ `interview_schedule`
+# lookup table (_interview_schedule.json, via pull_hq_interview_schedule.py), the bot's runtime
+# source of truth. This dict is used only for subgroups the lookup doesn't cover (e.g. ABT3 before
+# it launches). NOTE: the PANEL entry here is the OLD/stale 11-topic guess; the real schedule (13
+# topics 7,1,2,12,3,4,5,6,C,10,11,8,13) comes from the lookup.
+_FALLBACK_DESIGN = {
     "TRS": {"topics": ["A", "B"], "cadence": 7},
     "TRE": {"topics": ["A", "B", "C", "D", "E"], "cadence": 3},
     "ABT1-A": {"topics": ["1", "2", "3", "4"], "cadence": 7},
     "ABT1-B": {"topics": ["1", "2", "3", "4"], "cadence": 7},
     "ABT2-A": {"topics": ["1", "2"], "cadence": 14},
     "ABT2-B": {"topics": ["1", "2", "5", "6", "7", "8", "9", "3"], "cadence": 3},
-    # Panel (Long-Term Engagement): one N/A subgroup, cohort ids 1PC1 (COWACDI) / 1PE1 (EHA).
     "PANEL": {"topics": ["7", "1", "2", "3", "4", "5", "6", "8", "9", "10", "11"], "cadence": 4},
-    # A/B Test 3 (TBD; no data yet — present-only emit keeps these hidden until a cohort launches).
     "ABT3-A": {"topics": ["8", "9", "10", "11"], "cadence": 7},
     "ABT3-B": {"topics": ["8", "9", "10", "11"], "cadence": 7},
 }
@@ -71,6 +74,10 @@ TOPIC_NAMES = {
     "9": "Medicine Quality & Counterfeiting",
     "10": "Malaria 2",
     "11": "Water & Diarrhea 2",
+    "12": "Community & FLW Profile 2",
+    "13": "Medicine Quality & Counterfeiting 2",
+    "F": "Care Seeking Behavior",
+    "G": "Trust, Beliefs & Health Perceptions",
 }
 COHORT_TYPE_MAP = {
     "TRS": "Standard",
@@ -114,6 +121,37 @@ _TEST_COHORT_RE = re.compile(r"_test", re.IGNORECASE)
 
 def is_test_cohort(c):
     return bool(c) and bool(_TEST_COHORT_RE.search(str(c)))
+
+
+# ---- live interview design from the CCHQ `interview_schedule` lookup (the bot's runtime truth) ----
+# pull_hq_interview_schedule.py writes _interview_schedule.json = {cohort_id: [{n, topic, offset_days}]}.
+# We derive SUBGROUP_DESIGN (topics + cadence) per subgroup from it, falling back to _FALLBACK_DESIGN
+# for any subgroup the lookup doesn't cover (e.g. ABT3 before launch). cohort_schedule keeps the
+# per-cohort offsets (for accurate, cohort-specific release dates / "not yet offered" logic).
+cohort_schedule = {}
+_sched_path = ROOT / "_interview_schedule.json"
+if _sched_path.exists():
+    try:
+        cohort_schedule = json.loads(_sched_path.read_text(encoding="utf-8"))
+    except Exception:
+        cohort_schedule = {}
+
+
+def _derive_subgroup_design():
+    design = {sg: dict(v) for sg, v in _FALLBACK_DESIGN.items()}
+    seen = {}
+    for cid, seq in cohort_schedule.items():
+        sg = cohort_to_sg(cid)
+        if not sg or is_test_cohort(cid) or sg in seen:
+            continue
+        offs = [s["offset_days"] for s in seq]
+        cad = (offs[1] - offs[0]) if len(offs) > 1 else design.get(sg, {}).get("cadence", 7)
+        design[sg] = {"topics": [s["topic"] for s in seq], "cadence": cad}
+        seen[sg] = True
+    return design
+
+
+SUBGROUP_DESIGN = _derive_subgroup_design()
 
 
 def parse_dt(s):

@@ -61,10 +61,12 @@ for sg in SG_ORDER:
 # ---- line series bases ----
 line_series = []
 _line_di = payload.get("line_pct_started_di", {})
+_line_st = payload.get("line_status", {})
 for sg in SG_ORDER:
     line_series.append({"sg": sg, "base": len(elig_sg.get(sg, set())),
                         "pts": payload["line_pct_started"].get(sg, []),
-                        "pts_di": _line_di.get(sg, [])})  # de-impacted %started (item 8)
+                        "pts_di": _line_di.get(sg, []),       # de-impacted %started (item 8)
+                        "status": _line_st.get(sg, [])})      # per-point release status (items A1/A2)
 
 # ---- topicStatus reshaped: all 6 states (incl not-applicable) + total (for %-stack to 100) ----
 ORDER6 = [
@@ -200,6 +202,10 @@ out = {
     "granular_total": len(bm.rows),
     "flwMatrix": flw_matrix,
     "deimpact": payload.get("deimpact", {}),
+    # design + topic names derived from the CCHQ interview_schedule lookup — single source of truth
+    # so the render stops hardcoding them (fixes PANEL's 13-topic sequence everywhere).
+    "subgroupDesign": bm.SUBGROUP_DESIGN,
+    "topicNames": bm.TOPIC_NAMES,
     "unmappedCohorts": payload.get("unmapped_cohorts", []),
 }
 s = json.dumps(out, separators=(",", ":"))

@@ -39,19 +39,26 @@ function WorkflowUI(props) {
   var lineRef = React.useRef(null), lineInst = React.useRef(null);
   var barRef = React.useRef(null), barInst = React.useRef(null);
 
-  var SUBGROUP_DESIGN = {
-    "TRS": ["A", "B"], "TRE": ["A", "B", "C", "D", "E"],
-    "ABT1-A": ["1", "2", "3", "4"], "ABT1-B": ["1", "2", "3", "4"],
-    "ABT2-A": ["1", "2"], "ABT2-B": ["1", "2", "5", "6", "7", "8", "9", "3"],
-    "PANEL": ["7", "1", "2", "3", "4", "5", "6", "8", "9", "10", "11"],
-    "ABT3-A": ["8", "9", "10", "11"], "ABT3-B": ["8", "9", "10", "11"]
-  };
-  var TOPIC_NAMES = { A: "Community Demographics", B: "Malaria", C: "Nutrition Prevalance and Programs",
+  // Design + topic names come from the build (DATA.subgroupDesign / topicNames), derived from the
+  // CommCare HQ interview_schedule lookup — single source of truth. Fallbacks for older data only.
+  var SUBGROUP_DESIGN = {};
+  if (DATA.subgroupDesign) {
+    Object.keys(DATA.subgroupDesign).forEach(function (sg) { SUBGROUP_DESIGN[sg] = DATA.subgroupDesign[sg].topics; });
+  } else {
+    SUBGROUP_DESIGN = {
+      "TRS": ["A", "B"], "TRE": ["A", "B", "C", "D", "E"],
+      "ABT1-A": ["1", "2", "3", "4"], "ABT1-B": ["1", "2", "3", "4"],
+      "ABT2-A": ["1", "2"], "ABT2-B": ["1", "2", "5", "6", "7", "8", "9", "3"],
+      "PANEL": ["7", "1", "2", "12", "3", "4", "5", "6", "C", "10", "11", "8", "13"],
+      "ABT3-A": ["8", "9", "10", "11"], "ABT3-B": ["8", "9", "10", "11"]
+    };
+  }
+  var TOPIC_NAMES = DATA.topicNames || { A: "Community Demographics", B: "Malaria", C: "Nutrition Prevalance and Programs",
     D: "Water & Diarrhea", E: "Community & FLW Profile", "1": "Seasonal Malaria Chemoprevention",
     "2": "Seasonal Malaria Chemoprevention 2", "3": "Bed Net Usage", "4": "Health Worker Experience",
     "5": "Family Planning", "6": "Vitamin A Supplementation", "7": "Vaccines",
     "8": "Antibiotics and ACT Use", "9": "Medicine Quality & Counterfeiting",
-    "10": "Malaria 2", "11": "Water & Diarrhea 2" };
+    "10": "Malaria 2", "11": "Water & Diarrhea 2", "12": "Community & FLW Profile 2", "13": "Medicine Quality & Counterfeiting 2" };
   var SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "PANEL", "ABT3-A", "ABT3-B"];
   // 6 states in the spec order (Notes doc): not-applicable -> completed
   var STATES = ["not-applicable", "not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
@@ -78,10 +85,10 @@ function WorkflowUI(props) {
       </details>
     );
   }
-  var SG_COLOR = { "TRS": "#6366f1", "TRE": "#0ea5e9", "ABT1-A": "#f59e0b", "ABT1-B": "#ef4444", "ABT2-A": "#10b981", "ABT2-B": "#8b5cf6" };
+  var SG_COLOR = { "TRS": "#6366f1", "TRE": "#0ea5e9", "ABT1-A": "#f59e0b", "ABT1-B": "#ef4444", "ABT2-A": "#10b981", "ABT2-B": "#8b5cf6", "PANEL": "#14b8a6", "ABT3-A": "#ec4899", "ABT3-B": "#f43f5e" };
   // FLW × Topic matrix cell glyphs, indexed by STATES order (0 not-applicable … 5 completed)
   var CELL_GLYPH = ["", "·", "○", "!", "◐", "✓"];
-  var MATRIX_TOPIC_ORDER = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"];
+  var MATRIX_TOPIC_ORDER = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
 
   var th = "px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider";
   var td = "px-3 py-2 whitespace-nowrap text-sm text-gray-800";
@@ -98,11 +105,19 @@ function WorkflowUI(props) {
     lineInst.current = new window.Chart(lineRef.current.getContext("2d"), {
       type: "line",
       data: { labels: labels, datasets: DATA.lineSeries.map(function (s) {
-        var pts = (deImpact && s.pts_di && s.pts_di.length) ? s.pts_di : s.pts;
-        return { label: s.sg + " (n=" + s.base + ")", data: pts, borderColor: SG_COLOR[s.sg],
-          backgroundColor: SG_COLOR[s.sg], fill: false, tension: 0.2, spanGaps: true }; }) },
+        var raw = (deImpact && s.pts_di && s.pts_di.length) ? s.pts_di : s.pts;
+        var st = s.status || [];
+        // not-available interviews (not yet offered) → null so the line ends instead of a false 0%
+        var pts = raw.map(function (v, i) { return st[i] === "not-available" ? null : v; });
+        var col = SG_COLOR[s.sg] || "#9ca3af";
+        return { label: s.sg + " (n=" + s.base + ")", data: pts, borderColor: col,
+          backgroundColor: col, fill: false, tension: 0.2, spanGaps: false,
+          // in-progress interviews (offered but still accumulating) → dotted segment
+          segment: { borderDash: function (ctx) {
+            return (st[ctx.p0DataIndex] === "in-progress" || st[ctx.p1DataIndex] === "in-progress") ? [6, 5] : undefined;
+          } } }; }) },
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup)" }, legend: { position: "bottom" } },
+        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = settled, dotted = in-progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom" } },
         scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
