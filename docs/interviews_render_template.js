@@ -513,9 +513,11 @@ function WorkflowUI(props) {
                                   if (!(t in cb)) return <td key={t} className="px-2 py-1 text-center text-gray-200">·</td>;
                                   var code = cb[t];
                                   var _sid = sessByKey[r.f + "|" + t];
-                                  var _g = _sid ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + _sid + "/view/"} target="_blank" rel="noopener noreferrer" style={{ color: "#fff", textDecoration: "underline" }}>{CELL_GLYPH[code]}</a> : CELL_GLYPH[code];
-                                  return <td key={t} className="px-2 py-1 text-center text-xs" title={(TOPIC_NAMES[t] || t) + " — " + STATE_LABEL[STATES[code]] + (_sid ? " (open session ↗)" : "")}
-                                    style={{ backgroundColor: rgbaOf(STATE_COLOR[STATES[code]], 0.85), color: "#fff" }}>{_g}</td>;
+                                  var _cell = _sid
+                                    ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + _sid + "/view/"} target="_blank" rel="noopener noreferrer" style={{ color: "#fff", fontWeight: 700, textDecoration: "none" }}>{CELL_GLYPH[code]}<span style={{ fontSize: "9px", verticalAlign: "super", opacity: 0.9 }}>↗</span></a>
+                                    : CELL_GLYPH[code];
+                                  return <td key={t} className={"px-2 py-1 text-center text-xs" + (_sid ? " cursor-pointer" : "")} title={(TOPIC_NAMES[t] || t) + " — " + STATE_LABEL[STATES[code]] + (_sid ? " · click ↗ to open the OCS session" : "")}
+                                    style={{ backgroundColor: rgbaOf(STATE_COLOR[STATES[code]], 0.85), color: "#fff" }}>{_cell}</td>;
                                 })}
                               </tr>
                             );
@@ -692,11 +694,11 @@ function WorkflowUI(props) {
               <span className="text-xs font-medium text-gray-600">Penult/last artifact:</span>
               {subBtn(deImpact ? "di" : "raw", "raw", function () { setDeImpact(false); }, "Raw")}
               {subBtn(deImpact ? "di" : "raw", "di", function () { setDeImpact(true); }, "De-impacted")}
-              <span title={"FLWs removed from the last interview's Started (started last but not penultimate, triggered back-to-back):\n" + Object.keys(DATA.deimpact || {}).sort().map(function (sg) { return "  " + sg + ": " + DATA.deimpact[sg].count; }).join("\n") + "\n  Total: " + Object.keys(DATA.deimpact || {}).reduce(function (a, sg) { return a + DATA.deimpact[sg].count; }, 0)}
-                className="text-xs text-indigo-600 cursor-help border border-indigo-200 rounded-full w-4 h-4 inline-flex items-center justify-center">ℹ</span>
               {deImpact ? (
-                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                  Removes FLWs who started only the LAST interview (skipped the penultimate — the two were triggered back-to-back) from the last interview's Started, revealing the true decline. Affects the line chart &amp; drop-off %Started below.
+                <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  <span title={"FLWs removed from the last interview's Started (started last but not penultimate, triggered back-to-back):\n" + Object.keys(DATA.deimpact || {}).sort().map(function (sg) { return "  " + sg + ": " + DATA.deimpact[sg].count; }).join("\n") + "\n  Total: " + Object.keys(DATA.deimpact || {}).reduce(function (a, sg) { return a + DATA.deimpact[sg].count; }, 0)}
+                    className="cursor-help font-bold border border-amber-400 rounded-full w-4 h-4 inline-flex items-center justify-center shrink-0">ℹ</span>
+                  Removes FLWs who started only the LAST interview (skipped the penultimate — triggered back-to-back) from the last interview's Started, revealing the true decline. Hover ℹ for per-subgroup counts. Affects the line chart &amp; drop-off %Started below.
                 </span>
               ) : null}
             </div>
@@ -832,43 +834,45 @@ function WorkflowUI(props) {
                 );
               })}
             </Legend>
-            <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-200 text-xs">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className={th + " text-left"} rowSpan={2}>Subgroup</th>
-                    <th className={th + " text-right"} rowSpan={2}>Cohorts</th>
-                    <th className={th + " text-right"} rowSpan={2}>Invited</th>
-                    <th className={th + " text-right"} rowSpan={2}>Accepted</th>
-                    <th className={th + " text-right"} rowSpan={2}>Started Learn</th>
-                    <th className={th + " text-right"} rowSpan={2}>Compl. Learn</th>
-                    <th className={th + " text-right"} rowSpan={2}>Claimed</th>
-                    <th className={th + " text-right"} rowSpan={2}>FLW Reg</th>
-                    <th className={th + " text-right border-r border-gray-300"} rowSpan={2}># Initiated</th>
+            <div className="overflow-x-auto border border-gray-200 rounded-lg" style={{ maxHeight: "70vh", fontVariantNumeric: "tabular-nums" }}>
+              <table className="min-w-full text-xs border-collapse">
+                <thead className="sticky top-0 z-20">
+                  <tr className="bg-gray-100">
+                    <th className={th + " text-left sticky left-0 z-30 bg-gray-100 border-b border-gray-300"} rowSpan={2} title="Study arm / program type">Subgroup</th>
+                    <th className={th + " text-right border-b border-gray-300"} rowSpan={2} title="Number of cohorts in this subgroup">Cohorts</th>
+                    <th className={th + " text-right border-b border-gray-300"} rowSpan={2} title="Unique FLWs with an invited_date in Connect">Invited</th>
+                    <th className={th + " text-right border-b border-gray-300"} rowSpan={2} title="Unique FLWs with user_invite_status = accepted">Accepted</th>
+                    <th className={th + " text-right border-b border-gray-300"} rowSpan={2} title="Unique FLWs with a date_learn_started">Started Learn</th>
+                    <th className={th + " text-right border-b border-gray-300"} rowSpan={2} title="Unique FLWs with a completed_learn_date">Compl. Learn</th>
+                    <th className={th + " text-right border-b border-gray-300"} rowSpan={2} title="Unique FLWs with a date_claimed (downloaded the opportunity)">Claimed</th>
+                    <th className={th + " text-right border-b border-gray-300"} rowSpan={2} title="Claimed FLWs also registered in CommCare HQ (claimed ∩ HQ flw_registration)">FLW Reg</th>
+                    <th className={th + " text-right border-r-2 border-gray-300 border-b"} rowSpan={2} title="Unique FLWs with any Welcome/start form — the retention base (denominator for the % columns)"># Initiated</th>
                     {Array.apply(null, { length: maxIv }).map(function (_, i) {
-                      return <th key={i} className={th + " text-center border-l border-gray-200"} colSpan={6}>Interview {i + 1}</th>;
+                      return <th key={i} className={th + " text-center border-l-2 border-gray-300 " + (i % 2 ? "bg-gray-100" : "bg-indigo-50")} colSpan={6}>Interview {i + 1}</th>;
                     })}
                   </tr>
-                  <tr>
+                  <tr className="bg-gray-100">
                     {Array.apply(null, { length: maxIv }).map(function (_, i) {
+                      var gb = (i % 2 ? "bg-gray-100" : "bg-indigo-50");
                       return [
-                        <th key={i + "t"} className={th + " text-left border-l border-gray-200"}>Topic</th>,
-                        <th key={i + "e"} className={th + " text-right"}>Elig</th>,
-                        <th key={i + "tr"} className={th + " text-right"}>Trig/%</th>,
-                        <th key={i + "s"} className={th + " text-right"}>Start/%</th>,
-                        <th key={i + "c"} className={th + " text-right"}>Compl/%</th>,
-                        <th key={i + "ci"} className={th + " text-right"} title="Completed ÷ # Initiated">Overall%</th>,
+                        <th key={i + "t"} className={th + " text-left border-l-2 border-gray-300 border-b border-gray-300 " + gb} title="Topic code for this interview position (hover a cell for the topic name)">Topic</th>,
+                        <th key={i + "e"} className={th + " text-right border-b border-gray-300 " + gb} title="Eligible = # Initiated (constant retention base)">Elig</th>,
+                        <th key={i + "tr"} className={th + " text-right border-b border-gray-300 " + gb} title="Bot-triggered FLWs · % = Triggered ÷ Eligible">Trig/%</th>,
+                        <th key={i + "s"} className={th + " text-right border-b border-gray-300 " + gb} title="FLWs with an OCS session · % = Started ÷ Eligible">Start/%</th>,
+                        <th key={i + "c"} className={th + " text-right border-b border-gray-300 " + gb} title="Completed (session reached interview_complete) · % = Completed ÷ Started">Compl/%</th>,
+                        <th key={i + "ci"} className={th + " text-right border-b border-gray-300 " + gb} title="Overall completed = Completed ÷ # Initiated (share of everyone who initiated)">Overall%</th>,
                       ];
                     })}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {DATA.dropoff.subgroups.map(function (s) {
+                <tbody>
+                  {DATA.dropoff.subgroups.map(function (s, ridx) {
                     var cn = s.connect, byN = {};
                     s.interviews.forEach(function (iv) { byN[iv.n] = iv; });
+                    var rbg = ridx % 2 ? "bg-gray-50" : "bg-white";
                     return (
-                      <tr key={s.sg} className="hover:bg-gray-50">
-                        <td className={td + " font-medium"}>{s.sg}</td>
+                      <tr key={s.sg} className={rbg + " hover:bg-indigo-50/60 border-b border-gray-100"}>
+                        <td className={td + " font-semibold sticky left-0 z-10 " + rbg}>{s.sg}</td>
                         <td className={td + " text-right text-gray-500"}>{s.cohorts_n}</td>
                         <td className={td + " text-right"}>{cn.invited}</td>
                         <td className={td + " text-right"}>{cn.accepted}</td>
@@ -876,22 +880,22 @@ function WorkflowUI(props) {
                         <td className={td + " text-right"}>{cn.learn_completed}</td>
                         <td className={td + " text-right"}>{cn.claimed}</td>
                         <td className={td + " text-right"}>{cn.flw_reg}</td>
-                        <td className={td + " text-right font-medium border-r border-gray-300"}>{cn.initiated}</td>
+                        <td className={td + " text-right font-semibold border-r-2 border-gray-300"}>{cn.initiated}</td>
                         {Array.apply(null, { length: maxIv }).map(function (_, i) {
                           var iv = byN[i + 1];
                           if (!iv) return [
-                            <td key={i + "t"} className={td + " text-gray-200 border-l border-gray-200"}>—</td>,
+                            <td key={i + "t"} className={td + " text-gray-200 border-l-2 border-gray-300"}>—</td>,
                             <td key={i + "e"} className={td}></td>, <td key={i + "tr"} className={td}></td>,
                             <td key={i + "s"} className={td}></td>, <td key={i + "c"} className={td}></td>,
                             <td key={i + "ci"} className={td}></td>,
                           ];
                           return [
-                            <td key={i + "t"} className={td + " border-l border-gray-200"} title={iv.name}>{iv.topic}</td>,
-                            <td key={i + "e"} className={td + " text-right text-gray-500"}>{iv.eligible}</td>,
+                            <td key={i + "t"} className={td + " border-l-2 border-gray-300 font-medium text-gray-600"} title={iv.name}>{iv.topic}</td>,
+                            <td key={i + "e"} className={td + " text-right text-gray-400"}>{iv.eligible}</td>,
                             <td key={i + "tr"} className={td + " text-right"}>{iv.triggered} <span className="text-gray-400">{iv.pct_trig}%</span></td>,
                             <td key={i + "s"} className={td + " text-right"}>{iv.started} <span className="text-gray-400">{iv.pct_started}%</span></td>,
                             <td key={i + "c"} className={td + " text-right text-green-700"}>{iv.completed} <span className="text-gray-400">{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</span></td>,
-                            <td key={i + "ci"} className={td + " text-right text-gray-500"}>{iv.pct_completed_base == null ? "—" : iv.pct_completed_base + "%"}</td>,
+                            <td key={i + "ci"} className={td + " text-right font-semibold " + (iv.pct_completed_base == null ? "text-gray-400" : "text-green-800")}>{iv.pct_completed_base == null ? "—" : iv.pct_completed_base + "%"}</td>,
                           ];
                         })}
                       </tr>
