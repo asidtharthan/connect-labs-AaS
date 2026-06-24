@@ -117,7 +117,7 @@ function WorkflowUI(props) {
             return (st[ctx.p0DataIndex] === "in-progress" || st[ctx.p1DataIndex] === "in-progress") ? [6, 5] : undefined;
           } } }; }) },
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = settled, dotted = in-progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom" } },
+        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = settled, dotted = in-progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any subgroup in the legend below to show / hide its line", color: "#4f46e5", font: { weight: "bold", size: 11 } } } },
         scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
@@ -141,7 +141,7 @@ function WorkflowUI(props) {
             data: DATA.topicStatus.map(function (t) { return isCount ? (t[st] || 0) : (t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0); }),
             backgroundColor: STATE_COLOR[st] }; }) },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
-        plugins: { title: { display: true, text: isCount ? "FLW status distribution by topic — # of applicable FLWs" : "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom" },
+        plugins: { title: { display: true, text: isCount ? "FLW status distribution by topic — # of applicable FLWs" : "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any status in the legend below to show / hide it in the chart", color: "#4f46e5", font: { weight: "bold", size: 11 } } },
           tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + (isCount ? "" : "%"); } } } },
         scales: { x: { stacked: true, max: isCount ? maxApp : 100, title: { display: true, text: isCount ? "# of FLWs the topic applies to" : "% of claimed FLWs" } }, y: { stacked: true, ticks: { autoSkip: false, font: { size: 10 } } } } }
     });
@@ -417,7 +417,6 @@ function WorkflowUI(props) {
         {activeTab === "table" && (
           <div className="p-3 space-y-3">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center text-xs font-semibold text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 mr-1">⇄ Toggle:</span>
               {subBtn(tableSub, "granular", setTableSub, "Granular view")}
               {subBtn(tableSub, "topiccomplete", setTableSub, "Topic completion view")}
             </div>
@@ -425,7 +424,6 @@ function WorkflowUI(props) {
             {tableSub === "granular" && (
               <div>
                 <div className="flex flex-wrap items-center gap-2 px-1 py-2">
-                  <span className="inline-flex items-center text-xs font-semibold text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 mr-1">⇄ Toggle:</span>
                   {subBtn(gView, "sessions", function (v) { setGView(v); setGPage(0); }, "Sessions")}
                   {subBtn(gView, "matrix", function (v) { setGView(v); setGPage(0); }, "FLW × Topic")}
                   <span className="mx-1 text-gray-300">|</span>
@@ -544,7 +542,6 @@ function WorkflowUI(props) {
               <div className="space-y-4">
                 <p className="text-xs text-gray-400 px-1">Per-FLW status by topic, across all claimed FLWs (each topic stacks to 100%). Click a topic to break it down by cohort.</p>
                 <div className="flex flex-wrap items-center gap-2 px-1">
-                  <span className="inline-flex items-center text-xs font-semibold text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 mr-1">⇄ Toggle:</span>
                   {subBtn(topicChart, "stacked", setTopicChart, "Stacked bar")}
                   {subBtn(topicChart, "scoreboard", setTopicChart, "Completion scoreboard")}
                   {subBtn(topicChart, "heatmap", setTopicChart, "Heatmap")}
@@ -913,7 +910,6 @@ function WorkflowUI(props) {
         {activeTab === "breakdowns" && (
           <div className="p-3 space-y-3">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center text-xs font-semibold text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 mr-1">⇄ Toggle:</span>
               {subBtn(bdSub, "subgroup", setBdSub, "By Subgroup")}
               {subBtn(bdSub, "topic", setBdSub, "By Topic")}
               {subBtn(bdSub, "ab", setBdSub, "A/B Arms")}
