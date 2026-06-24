@@ -260,7 +260,9 @@ def main():
     else:
         print("\n=== 2b. pull words: skipped (using existing _ocs_words_cache.json) ===", flush=True)
     if args.pull_connect:
-        run("3. pull Connect user_data", [PY, "fetch_all_cohorts.py"])
+        # headless Connect pull (OAuth refresh-token grant) — regenerates connect_user_data_snapshot.csv.
+        # non-critical: on failure the build falls back to the existing snapshot / CONNECT_SNAP secrets.
+        run("3. pull Connect user_data (headless)", [PY, "fetch_connect_user_data.py"], required=False)
     else:
         print("\n=== 3. pull Connect: skipped (Connect funnel reuses last local user_data snapshot) ===", flush=True)
 
