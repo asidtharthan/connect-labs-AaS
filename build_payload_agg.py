@@ -239,8 +239,9 @@ t2 = [
         "pct": round(100 * t2a[tc]["icmp"] / t2a[tc]["ist"], 1) if t2a[tc]["ist"] else None,
         "avg_words": round(t2a[tc]["hw"] / t2a[tc]["hm"], 1) if t2a[tc]["hm"] else None,
     }
-    for tc in TOPICS
-    if tc in t2a
+    # all applicable topics (not just those with started data) so the By-Topic breakdown shows the
+    # full roster incl. not-yet-started ones (10/11/12/13) — zero-activity rows get 0 / None metrics.
+    for tc in APPLICABLE
 ]
 
 # ---- topic-status distribution (per topic + per subgroup) for stacked bars ----
