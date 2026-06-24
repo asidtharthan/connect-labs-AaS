@@ -143,7 +143,7 @@ function WorkflowUI(props) {
       options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
         plugins: { title: { display: true, text: isCount ? "FLW status distribution by topic — # of applicable FLWs" : "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom" },
           tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + (isCount ? "" : "%"); } } } },
-        scales: { x: { stacked: true, max: isCount ? maxApp : 100, title: { display: true, text: isCount ? "# of FLWs the topic applies to" : "% of claimed FLWs" } }, y: { stacked: true } } }
+        scales: { x: { stacked: true, max: isCount ? maxApp : 100, title: { display: true, text: isCount ? "# of FLWs the topic applies to" : "% of claimed FLWs" } }, y: { stacked: true, ticks: { autoSkip: false, font: { size: 10 } } } } }
     });
     return function () { if (barInst.current) { barInst.current.destroy(); barInst.current = null; } };
   }, [activeTab, tableSub, topicChart, tcMode]);
@@ -561,7 +561,7 @@ function WorkflowUI(props) {
                   {subBtn(tcMode, "count", setTcMode, "Raw counts")}
                 </div>
                 {topicChart === "stacked" && (
-                  <div style={{ height: "420px" }}><canvas ref={barRef}></canvas></div>
+                  <div style={{ height: Math.max(440, (DATA.topicStatus.length || 12) * 30) + "px" }}><canvas ref={barRef}></canvas></div>
                 )}
                 {topicChart === "scoreboard" && (
                   <div className="px-1">
