@@ -129,17 +129,21 @@ function WorkflowUI(props) {
     if (!barRef.current || !window.Chart) return;
     if (barInst.current) barInst.current.destroy();
     var isCount = tcMode === "count";
+    // counts mode: drop "not applicable" (it isn't an interview count) and fit the axis to the
+    // largest applicable bar — removes the empty gap to the axis. % mode keeps all 6 (stacks to 100).
+    var barStates = isCount ? STATES5 : STATES;
+    var maxApp = Math.max.apply(null, DATA.topicStatus.map(function (t) { return t.applicable || 0; })) || 1;
     barInst.current = new window.Chart(barRef.current.getContext("2d"), {
       type: "bar",
       data: { labels: DATA.topicStatus.map(function (t) { return t.code + " · " + (TOPIC_NAMES[t.code] || t.code); }),
-        datasets: STATES.map(function (st) {
+        datasets: barStates.map(function (st) {
           return { label: STATE_LABEL[st],
             data: DATA.topicStatus.map(function (t) { return isCount ? (t[st] || 0) : (t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0); }),
             backgroundColor: STATE_COLOR[st] }; }) },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
-        plugins: { title: { display: true, text: isCount ? "FLW status distribution by topic — # of claimed FLWs" : "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom" },
+        plugins: { title: { display: true, text: isCount ? "FLW status distribution by topic — # of applicable FLWs" : "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom" },
           tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + (isCount ? "" : "%"); } } } },
-        scales: { x: { stacked: true, max: isCount ? undefined : 100, title: { display: true, text: isCount ? "# of claimed FLWs" : "% of claimed FLWs" } }, y: { stacked: true } } }
+        scales: { x: { stacked: true, max: isCount ? maxApp : 100, title: { display: true, text: isCount ? "# of FLWs the topic applies to" : "% of claimed FLWs" } }, y: { stacked: true } } }
     });
     return function () { if (barInst.current) { barInst.current.destroy(); barInst.current = null; } };
   }, [activeTab, tableSub, topicChart, tcMode]);
@@ -182,10 +186,51 @@ function WorkflowUI(props) {
 
   var c = DATA.counts;
   var maxIv = Math.max.apply(null, (DATA.dropoff.subgroups || []).map(function (s) { return s.interviews.length; }));
+  // ---- Full Retention Table: build a flat matrix (for copy/CSV export) ----
+  function retentionMatrix() {
+    var cols = ["Subgroup", "Cohorts", "Invited", "Accepted", "Started Learn", "Completed Learn", "Claimed", "FLW Reg", "# Initiated"];
+    for (var k = 1; k <= maxIv; k++) {
+      ["Topic", "Eligible", "Triggered", "% Trig", "Started", "% Started", "Completed", "% Compl", "Overall completed %"].forEach(function (h) { cols.push("I" + k + " " + h); });
+    }
+    var rows = [cols];
+    DATA.dropoff.subgroups.forEach(function (s) {
+      var cn = s.connect, byN = {};
+      s.interviews.forEach(function (iv) { byN[iv.n] = iv; });
+      var r = [s.sg, s.cohorts_n, cn.invited, cn.accepted, cn.learn_started, cn.learn_completed, cn.claimed, cn.flw_reg, cn.initiated];
+      for (var k = 1; k <= maxIv; k++) {
+        var iv = byN[k];
+        if (!iv) { r.push("", "", "", "", "", "", "", "", ""); }
+        else { r.push(iv.topic, iv.eligible, iv.triggered, iv.pct_trig, iv.started, iv.pct_started, iv.completed, iv.pct_completed == null ? "" : iv.pct_completed, iv.pct_completed_base == null ? "" : iv.pct_completed_base); }
+      }
+      rows.push(r);
+    });
+    return rows;
+  }
+  function copyRetention() {
+    var t = retentionMatrix().map(function (r) { return r.join("\t"); }).join("\n");
+    if (navigator.clipboard) navigator.clipboard.writeText(t);
+  }
+  function downloadRetention() {
+    var csv = retentionMatrix().map(function (r) {
+      return r.map(function (c) { var s = String(c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(",");
+    }).join("\n");
+    var blob = new Blob([csv], { type: "text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "full_retention_table.csv"; a.click();
+  }
 
   // ---- Granular: ALL live OCS sessions (from the pipeline prop, not embedded) + client-side search/paging ----
   function liveRows(alias) { var p = props.pipelines; return (p && p[alias] && p[alias].rows) || []; }
   var ocsLive = liveRows("sessions");
+  // (FLW × Topic links, item D) map "connect_id|interview" -> OCS session id, from the live pipeline.
+  // Lets each matrix cell link to its session with zero embed-size cost; empty if pipeline not loaded.
+  var sessByKey = {};
+  ocsLive.forEach(function (r) {
+    var cid = r.connect_id || r.username || "";
+    var iv = (r.interview == null || r.interview === "") ? "" : String(r.interview);
+    var sid = r.id || r.matched_session_id || "";
+    if (cid && iv && sid && !sessByKey[cid + "|" + iv]) sessByKey[cid + "|" + iv] = sid;
+  });
   var sessSource = ocsLive.length
     ? ocsLive.map(function (r) {
         var iv = r.interview, stt = r.interview_status || "";
@@ -274,7 +319,7 @@ function WorkflowUI(props) {
       <div className="bg-white rounded-lg shadow-sm">
         <div className="border-b border-gray-200 px-5">
           <nav className="-mb-px flex space-x-6">
-            {[["overview", "Overview"], ["table", "Table View"], ["funnels", "Interview Completion Funnels"], ["breakdowns", "Breakdowns"]].map(function (t) {
+            {[["overview", "Overview"], ["table", "Table View"], ["funnels", "Interview Completion Funnels"], ["fullretention", "Full Retention Table"], ["breakdowns", "Breakdowns"]].map(function (t) {
               var on = activeTab === t[0];
               return (
                 <button key={t[0]} onClick={function () { setTab(t[0]); }}
@@ -467,8 +512,10 @@ function WorkflowUI(props) {
                                 {MTOPICS.map(function (t) {
                                   if (!(t in cb)) return <td key={t} className="px-2 py-1 text-center text-gray-200">·</td>;
                                   var code = cb[t];
-                                  return <td key={t} className="px-2 py-1 text-center text-xs" title={(TOPIC_NAMES[t] || t) + " — " + STATE_LABEL[STATES[code]]}
-                                    style={{ backgroundColor: rgbaOf(STATE_COLOR[STATES[code]], 0.85), color: "#fff" }}>{CELL_GLYPH[code]}</td>;
+                                  var _sid = sessByKey[r.f + "|" + t];
+                                  var _g = _sid ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + _sid + "/view/"} target="_blank" rel="noopener noreferrer" style={{ color: "#fff", textDecoration: "underline" }}>{CELL_GLYPH[code]}</a> : CELL_GLYPH[code];
+                                  return <td key={t} className="px-2 py-1 text-center text-xs" title={(TOPIC_NAMES[t] || t) + " — " + STATE_LABEL[STATES[code]] + (_sid ? " (open session ↗)" : "")}
+                                    style={{ backgroundColor: rgbaOf(STATE_COLOR[STATES[code]], 0.85), color: "#fff" }}>{_g}</td>;
                                 })}
                               </tr>
                             );
@@ -645,6 +692,8 @@ function WorkflowUI(props) {
               <span className="text-xs font-medium text-gray-600">Penult/last artifact:</span>
               {subBtn(deImpact ? "di" : "raw", "raw", function () { setDeImpact(false); }, "Raw")}
               {subBtn(deImpact ? "di" : "raw", "di", function () { setDeImpact(true); }, "De-impacted")}
+              <span title={"FLWs removed from the last interview's Started (started last but not penultimate, triggered back-to-back):\n" + Object.keys(DATA.deimpact || {}).sort().map(function (sg) { return "  " + sg + ": " + DATA.deimpact[sg].count; }).join("\n") + "\n  Total: " + Object.keys(DATA.deimpact || {}).reduce(function (a, sg) { return a + DATA.deimpact[sg].count; }, 0)}
+                className="text-xs text-indigo-600 cursor-help border border-indigo-200 rounded-full w-4 h-4 inline-flex items-center justify-center">ℹ</span>
               {deImpact ? (
                 <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                   Removes FLWs who started only the LAST interview (skipped the penultimate — the two were triggered back-to-back) from the last interview's Started, revealing the true decline. Affects the line chart &amp; drop-off %Started below.
@@ -760,9 +809,30 @@ function WorkflowUI(props) {
               </table>
             </div>
 
+          </div>
+        )}
+
+        {activeTab === "fullretention" && (
+          <div className="p-3 space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-700 mr-2">Full retention table — Connect funnel → every interview (one row per subgroup)</h3>
+              <button onClick={copyRetention} className="px-3 py-1.5 text-sm rounded-md bg-indigo-600 text-white hover:bg-indigo-700">⧉ Copy</button>
+              <button onClick={downloadRetention} className="px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100">↓ CSV</button>
+              <span className="text-xs text-gray-400">Copy pastes tab-separated into Sheets/Excel.</span>
+            </div>
+            <Legend title="Column definitions">
+              <div><b>Connect funnel</b> (unique FLWs per subgroup): <b>Invited</b> → <b>Accepted</b> → <b>Started Learn</b> → <b>Completed Learn</b> → <b>Claimed</b> (downloaded the opportunity) → <b>FLW Reg</b> (also registered in CommCare HQ) → <b># Initiated</b> (submitted any Welcome/start form — the retention base).</div>
+              <div><b>Per interview:</b> <b>Eligible</b> = # Initiated (constant base). <b>Triggered</b> = bot prompted that interview. <b>Started</b> = an OCS session exists. <b>Completed</b> = session reached interview_complete.</div>
+              <div><b>% Trig</b> = Triggered ÷ Eligible · <b>% Started</b> = Started ÷ Eligible · <b>% Compl</b> = Completed ÷ Started (conversion of those who started) · <b>Overall completed</b> = Completed ÷ # Initiated (completion as a share of everyone who initiated).</div>
+            </Legend>
+            <Legend title="Which interviews each subgroup runs (topic sequence)">
+              {SG_ORDER.filter(function (sg) { return (SUBGROUP_DESIGN[sg] || []).length; }).map(function (sg) {
+                return (
+                  <div key={sg}><b>{sg}</b> <span className="text-gray-400">({(SUBGROUP_DESIGN[sg] || []).length} interviews, every {(DATA.subgroupDesign && DATA.subgroupDesign[sg] ? DATA.subgroupDesign[sg].cadence : "?")}d)</span>: {(SUBGROUP_DESIGN[sg] || []).map(function (t, i) { return "Int" + (i + 1) + "=" + t + " (" + (TOPIC_NAMES[t] || t) + ")"; }).join(" · ")}</div>
+                );
+              })}
+            </Legend>
             <div className="overflow-x-auto">
-              <h3 className="text-sm font-semibold text-gray-700 px-1 py-1">Full retention table — Connect funnel → every interview (one row per subgroup)</h3>
-              <p className="text-xs text-gray-400 px-1">GW "Retention Drop-off" layout. Eligible = # Initiated (constant retention base). % Triggered / % Started = ÷ Eligible; % Compl = ÷ Started; <b>%init</b> = Completed ÷ Eligible (completion as a share of everyone who initiated).</p>
               <table className="min-w-full border border-gray-200 text-xs">
                 <thead className="bg-gray-50">
                   <tr>
@@ -787,7 +857,7 @@ function WorkflowUI(props) {
                         <th key={i + "tr"} className={th + " text-right"}>Trig/%</th>,
                         <th key={i + "s"} className={th + " text-right"}>Start/%</th>,
                         <th key={i + "c"} className={th + " text-right"}>Compl/%</th>,
-                        <th key={i + "ci"} className={th + " text-right"}>%init</th>,
+                        <th key={i + "ci"} className={th + " text-right"} title="Completed ÷ # Initiated">Overall%</th>,
                       ];
                     })}
                   </tr>
