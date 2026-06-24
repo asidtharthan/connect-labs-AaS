@@ -74,6 +74,21 @@ def main():
     except Exception as e:
         print(f"  [skip] MCP_BEARER — could not read ~/.claude.json connect_labs ({e}); set it manually")
 
+    # 5) Headless Connect pull creds (OAuth refresh-token grant) + GH PAT for token write-back.
+    #    From env, else .connect_creds.json {refresh_token, client_id, client_secret, gh_pat}.
+    cc = json.load(open(".connect_creds.json")) if os.path.exists(".connect_creds.json") else {}
+    for secret_name, env_name, cc_key in [
+        ("CONNECT_REFRESH_TOKEN", "CONNECT_REFRESH_TOKEN", "refresh_token"),
+        ("CONNECT_OAUTH_CLIENT_ID", "CONNECT_OAUTH_CLIENT_ID", "client_id"),
+        ("CONNECT_OAUTH_CLIENT_SECRET", "CONNECT_OAUTH_CLIENT_SECRET", "client_secret"),
+        ("GH_PAT", "GH_PAT", "gh_pat"),
+    ]:
+        val = os.environ.get(env_name) or cc.get(cc_key)
+        if val:
+            gh_set(secret_name, val, args.repo)
+        else:
+            print(f"  [skip] {secret_name} — set env {env_name} or add to .connect_creds.json")
+
     print("\nDone. Verify with:  gh secret list" + (f" --repo {args.repo}" if args.repo else ""))
 
 
