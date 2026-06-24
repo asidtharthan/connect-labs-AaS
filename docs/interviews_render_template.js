@@ -68,7 +68,7 @@ function WorkflowUI(props) {
     "started-not-completed": "Started, not completed", "completed": "Completed" };
   var STATE_COLOR = { "not-applicable": "#e5e7eb", "not-available-yet": "#6366f1",
     "available-not-started": "#f59e0b", "available-missed-overdue": "#ef4444",
-    "started-not-completed": "#84cc16", "completed": "#16a34a" };
+    "started-not-completed": "#0d9488", "completed": "#16a34a" };
   var STATE_DEF = {
     "not-applicable": "topic isn't part of this cohort's design",
     "not-available-yet": "in the cohort, but not yet released per today's date, the topic's place in the schedule, and the cohort's training date",
@@ -416,7 +416,8 @@ function WorkflowUI(props) {
 
         {activeTab === "table" && (
           <div className="p-3 space-y-3">
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-500 mr-1">⇄ Toggle:</span>
               {subBtn(tableSub, "granular", setTableSub, "Granular view")}
               {subBtn(tableSub, "topiccomplete", setTableSub, "Topic completion view")}
             </div>
@@ -424,6 +425,7 @@ function WorkflowUI(props) {
             {tableSub === "granular" && (
               <div>
                 <div className="flex flex-wrap items-center gap-2 px-1 py-2">
+                  <span className="text-xs font-medium text-gray-500 mr-1">⇄ Toggle:</span>
                   {subBtn(gView, "sessions", function (v) { setGView(v); setGPage(0); }, "Sessions")}
                   {subBtn(gView, "matrix", function (v) { setGView(v); setGPage(0); }, "FLW × Topic")}
                   <span className="mx-1 text-gray-300">|</span>
@@ -552,6 +554,7 @@ function WorkflowUI(props) {
                   })}
                 </Legend>
                 <div className="flex flex-wrap items-center gap-2 px-1">
+                  <span className="text-xs font-medium text-gray-500 mr-1">⇄ Toggle:</span>
                   {subBtn(topicChart, "stacked", setTopicChart, "Stacked bar")}
                   {subBtn(topicChart, "scoreboard", setTopicChart, "Completion scoreboard")}
                   {subBtn(topicChart, "heatmap", setTopicChart, "Heatmap")}
@@ -915,7 +918,8 @@ function WorkflowUI(props) {
               <div><b>% Completed:</b> Interviews Completed ÷ Interviews Started.</div>
               <div><b>Avg words / FLW msg:</b> total FLW-message words ÷ total FLW messages, over started sessions (whitespace word count).</div>
             </Legend>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-500 mr-1">⇄ Toggle:</span>
               {subBtn(bdSub, "subgroup", setBdSub, "By Subgroup")}
               {subBtn(bdSub, "topic", setBdSub, "By Topic")}
               {subBtn(bdSub, "ab", setBdSub, "A/B Arms")}
