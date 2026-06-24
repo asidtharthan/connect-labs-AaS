@@ -962,12 +962,13 @@ function WorkflowUI(props) {
                   <tbody className="bg-white divide-y divide-gray-100">
                     {DATA.table2.map(function (r) {
                       var _q = DATA.topicQuestions && DATA.topicQuestions[r.code] != null ? DATA.topicQuestions[r.code] : null;
+                      var none = !r.ist;  // no started interviews yet (e.g. not-yet-reached PANEL topics)
                       return (
-                        <tr key={r.code} className="hover:bg-gray-50">
+                        <tr key={r.code} className={none ? "text-gray-400" : "hover:bg-gray-50"}>
                           <td className={td + " font-medium"}>{r.code}</td><td className={td}>{r.name}</td>
                           <td className={td + " text-right text-gray-600"}>{_q == null ? "—" : _q}</td>
-                          <td className={td + " text-right"}>{r.flws}</td><td className={td + " text-right"}>{r.ist}</td>
-                          <td className={td + " text-right text-green-700 font-medium"}>{r.icmp}</td>
+                          <td className={td + " text-right"}>{none ? "—" : r.flws}</td><td className={td + " text-right"}>{none ? "—" : r.ist}</td>
+                          <td className={td + " text-right text-green-700 font-medium"}>{none ? "—" : r.icmp}</td>
                           <td className={td + " text-right text-gray-500"}>{pctTxt(r.pct)}</td>
                           <td className={td + " text-right text-gray-500"}>{r.avg_words == null ? "—" : r.avg_words}</td>
                         </tr>
