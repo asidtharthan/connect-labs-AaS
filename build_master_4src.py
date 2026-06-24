@@ -79,6 +79,12 @@ TOPIC_NAMES = {
     "F": "Care Seeking Behavior",
     "G": "Trust, Beliefs & Health Perceptions",
 }
+# Question count per topic (Cohort Tracker → Topics_Master). Design metadata for Breakdowns → By Topic.
+TOPIC_QUESTIONS = {
+    "A": 7, "B": 9, "C": 8, "D": 6, "E": 8,
+    "1": 9, "2": 10, "3": 19, "4": 16, "5": 5, "6": 13, "7": 7,
+    "8": 10, "9": 5, "10": 8, "11": 10, "12": 13, "13": 7,
+}
 COHORT_TYPE_MAP = {
     "TRS": "Standard",
     "TRE": "Enhanced",

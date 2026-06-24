@@ -206,6 +206,7 @@ out = {
     # so the render stops hardcoding them (fixes PANEL's 13-topic sequence everywhere).
     "subgroupDesign": bm.SUBGROUP_DESIGN,
     "topicNames": bm.TOPIC_NAMES,
+    "topicQuestions": bm.TOPIC_QUESTIONS,
     "unmappedCohorts": payload.get("unmapped_cohorts", []),
 }
 s = json.dumps(out, separators=(",", ":"))

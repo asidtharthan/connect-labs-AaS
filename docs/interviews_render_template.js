@@ -954,15 +954,18 @@ function WorkflowUI(props) {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50"><tr>
                     <th className={th + " text-left"}>Topic</th><th className={th + " text-left"}>Name</th>
+                    <th className={th + " text-right"} title="Number of questions in this topic's interview (per the design)"># Questions</th>
                     <th className={th + " text-right"}>FLWs Started</th><th className={th + " text-right"}>Interviews Started</th>
                     <th className={th + " text-right"}>Completed</th><th className={th + " text-right"}>% Completed</th>
                     <th className={th + " text-right"}>Avg words / FLW msg</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {DATA.table2.map(function (r) {
+                      var _q = DATA.topicQuestions && DATA.topicQuestions[r.code] != null ? DATA.topicQuestions[r.code] : null;
                       return (
                         <tr key={r.code} className="hover:bg-gray-50">
                           <td className={td + " font-medium"}>{r.code}</td><td className={td}>{r.name}</td>
+                          <td className={td + " text-right text-gray-600"}>{_q == null ? "—" : _q}</td>
                           <td className={td + " text-right"}>{r.flws}</td><td className={td + " text-right"}>{r.ist}</td>
                           <td className={td + " text-right text-green-700 font-medium"}>{r.icmp}</td>
                           <td className={td + " text-right text-gray-500"}>{pctTxt(r.pct)}</td>
