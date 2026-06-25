@@ -80,6 +80,16 @@ def is_test(c):
     return bool(c) and bool(re.search(r"_test", str(c), re.I))
 
 
+# Must mirror build_master_4src.py exactly so this independent gate reconciles after the cleanup.
+EXCLUDE_FLWS = {
+    "10wcuh1u3s6595okhmfd", "5ej4jqjha0x1f3tbc08y", "7xhpeda8ipsouip6ynyk", "b6vt2wzi8slth6mlag1g",
+    "m0i5azsqk7mzixp1bzib", "m33dn33c5vyf8es9kagq", "m6svr4qy3gemxuj2inoe", "rfxkcx7nbom2whml8mbb",
+    "sqaktdfxupepdvt90t3f", "v3urwjuzqjxp3njyb5uz", "va7vh76am0m83h0rzu01", "wwnvw4diurrzuy32vba7",
+    "xo1n01inul0ofr9z32fa", "y6xjjw4xilga8d1qvaab",
+}
+CONNECT_COHORT_OVERRIDE = {("6c1ff0cb57e27e780339", "1ABT1EA1"): "1ABT1EB1"}
+
+
 # ---- load target ----
 DD = json.loads((ROOT / "dashboard_data.json").read_text(encoding="utf-8"))
 DESIGN = DD["subgroupDesign"]   # grounded separately in section B
@@ -105,6 +115,8 @@ for path in sorted(HQ.glob("*.jsonl")):
         form = sub.get("form", {}) or {}
         meta = form.get("meta", {}) if isinstance(form.get("meta"), dict) else {}
         cid = (form.get("connect_id") or meta.get("username") or sub.get("username") or "").strip()
+        if cid in EXCLUDE_FLWS:
+            continue
         if ft == "flw_registration":
             if cid: flw_registered.add(cid)
             continue
@@ -188,11 +200,14 @@ chk("is_completed == (OCS session status==interview_complete) (raw)", bad_comple
 raw_fun = defaultdict(lambda: {k: set() for k in ["invited", "accepted", "learn_completed", "claimed"]})
 train_date = {}
 for row in snap:
+    u = (row.get("username") or "").strip()
+    if u in EXCLUDE_FLWS:
+        continue
     c = (row.get("cohort_id") or "").strip()
+    c = CONNECT_COHORT_OVERRIDE.get((u, c), c)
     sg = cohort_to_sg(c)
     if not sg or is_test(c):
         continue
-    u = (row.get("username") or "").strip()
     inv = pdt(row.get("invited_date"))
     if inv and (c not in train_date or inv.date() < train_date[c]):
         train_date[c] = inv.date()
@@ -313,12 +328,17 @@ for r in R:
 # claimed FLWs per cohort (from snapshot)
 cohort_claimed = defaultdict(set); cohort_sg = {}
 for row in snap:
-    c = (row.get("cohort_id") or "").strip(); sg = cohort_to_sg(c)
+    u = (row.get("username") or "").strip()
+    if u in EXCLUDE_FLWS:
+        continue
+    c = (row.get("cohort_id") or "").strip()
+    c = CONNECT_COHORT_OVERRIDE.get((u, c), c)
+    sg = cohort_to_sg(c)
     if not sg or is_test(c):
         continue
     cohort_sg[c] = sg
-    if pdt(row.get("date_claimed")) and (row.get("username") or "").strip():
-        cohort_claimed[c].add(row["username"].strip())
+    if pdt(row.get("date_claimed")) and u:
+        cohort_claimed[c].add(u)
 
 
 def status_for(flw, cohort, sg, topic):
