@@ -33,6 +33,7 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: 'utf-8'
       INTERVIEWS_CONNECT_SNAPSHOT: '1'
+      INTERVIEWS_STRICT_FRESHNESS: '1' # enforce brutal_verify freshness asserts (CI always live-pulls)
       MCP_URL: 'https://labs.connect.dimagi.com/mcp/'
       MCP_BEARER: ${{ secrets.MCP_BEARER }}
       HQ_API_KEY: ${{ secrets.HQ_API_KEY }}
