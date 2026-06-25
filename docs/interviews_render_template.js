@@ -73,7 +73,7 @@ function WorkflowUI(props) {
     "available-not-started": "Available, not started", "available-missed-overdue": "Available, missed/overdue",
     "started-not-completed": "Started, not completed", "completed": "Completed" };
   var STATE_COLOR = { "not-applicable": "#e5e7eb", "not-available-yet": "#6366f1",
-    "available-not-started": "#f59e0b", "available-missed-overdue": "#ef4444",
+    "available-not-started": "#f59e0b", "available-missed-overdue": "#b91c1c",
     "started-not-completed": "#db2777", "completed": "#16a34a" };
   var STATE_DEF = {
     "not-applicable": "topic isn't part of this cohort's design",
