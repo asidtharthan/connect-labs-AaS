@@ -65,6 +65,10 @@ function WorkflowUI(props) {
   // 6 states in the spec order (Notes doc): not-applicable -> completed
   var STATES = ["not-applicable", "not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
   var STATES5 = ["not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
+  // Topic-completion display order: completed (left/first) → not-available-yet; not-applicable parked last.
+  // Used by the stacked bar, its legend, the detail table + drilldown, and the heatmap so they all read the same way.
+  var BAR_ORDER = ["completed", "started-not-completed", "available-not-started", "available-missed-overdue", "not-available-yet", "not-applicable"];
+  var BAR_ORDER5 = ["completed", "started-not-completed", "available-not-started", "available-missed-overdue", "not-available-yet"];
   var STATE_LABEL = { "not-applicable": "Not applicable", "not-available-yet": "Not available yet",
     "available-not-started": "Available, not started", "available-missed-overdue": "Available, missed/overdue",
     "started-not-completed": "Started, not completed", "completed": "Completed" };
@@ -112,14 +116,13 @@ function WorkflowUI(props) {
         // not-available interviews (not yet offered) → null so the line ends instead of a false 0%
         var pts = raw.map(function (v, i) { return st[i] === "not-available" ? null : v; });
         var col = SG_COLOR[s.sg] || "#9ca3af";
+        // a subgroup still accumulating any interview (e.g. PANEL) → dot its ENTIRE line; fully settled → solid
+        var inProgress = st.some(function (x) { return x === "in-progress"; });
         return { label: s.sg + " (n=" + s.base + ")", data: pts, borderColor: col,
           backgroundColor: col, fill: false, tension: 0.2, spanGaps: false,
-          // in-progress interviews (offered but still accumulating) → dotted segment
-          segment: { borderDash: function (ctx) {
-            return (st[ctx.p0DataIndex] === "in-progress" || st[ctx.p1DataIndex] === "in-progress") ? [6, 5] : undefined;
-          } } }; }) },
+          borderDash: inProgress ? [6, 5] : undefined }; }) },
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = settled, dotted = in-progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any subgroup in the legend below to show / hide its line", color: "#4f46e5", font: { weight: "bold", size: 11 } } } },
+        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any subgroup in the legend below to show / hide its line", color: "#4f46e5", font: { weight: "bold", size: 11 } } } },
         scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
@@ -133,7 +136,7 @@ function WorkflowUI(props) {
     var isCount = tcMode === "count";
     // counts mode: drop "not applicable" (it isn't an interview count) and fit the axis to the
     // largest applicable bar — removes the empty gap to the axis. % mode keeps all 6 (stacks to 100).
-    var barStates = isCount ? STATES5 : STATES;
+    var barStates = isCount ? BAR_ORDER5 : BAR_ORDER;
     var maxApp = Math.max.apply(null, DATA.topicStatus.map(function (t) { return t.applicable || 0; })) || 1;
     barInst.current = new window.Chart(barRef.current.getContext("2d"), {
       type: "bar",
@@ -386,8 +389,8 @@ function WorkflowUI(props) {
                     <th className={th + " text-right"}>Completed Learn</th>
                     <th className={th + " text-right"}>Claimed</th>
                     <th className={th + " text-right"}>Initiated</th>
-                    <th className={th + " text-right"}>Started ≥1</th>
-                    <th className={th + " text-right"}>Completed ≥1</th>
+                    <th className={th + " text-right"}>FLWs Started ≥1</th>
+                    <th className={th + " text-right"}>FLWs Completed ≥1</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {DATA.connectFunnel.map(function (r) {
@@ -587,7 +590,7 @@ function WorkflowUI(props) {
                   {subBtn(tcMode, "count", setTcMode, "Raw counts")}
                 </div>
                 <Legend title="Status definitions (in chart order)">
-                  {STATES.map(function (s) {
+                  {BAR_ORDER.map(function (s) {
                     return (
                       <div key={s} className="flex items-start gap-2">
                         <span style={{ display: "inline-block", width: 11, height: 11, background: STATE_COLOR[s], borderRadius: 2, marginTop: 3, flexShrink: 0 }}></span>
@@ -628,7 +631,7 @@ function WorkflowUI(props) {
                       <thead className="bg-gray-50"><tr>
                         <th className={th + " text-left"}>Topic</th>
                         <th className={th + " text-right"}>Applies</th>
-                        {STATES5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
+                        {BAR_ORDER5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
                       </tr></thead>
                       <tbody>
                         {DATA.topicStatus.map(function (t) {
@@ -636,7 +639,7 @@ function WorkflowUI(props) {
                             <tr key={t.code}>
                               <td className={td + " font-medium text-gray-700"}>{t.code} · {TOPIC_NAMES[t.code] || t.code}</td>
                               <td className={td + " text-right text-gray-400"}>{t.applicable}</td>
-                              {STATES5.map(function (s) {
+                              {BAR_ORDER5.map(function (s) {
                                 var frac = t.applicable ? t[s] / t.applicable : 0;
                                 var pct = t.applicable ? Math.round(1000 * t[s] / t.applicable) / 10 : null;
                                 return (
@@ -656,7 +659,7 @@ function WorkflowUI(props) {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50"><tr>
                       <th className={th + " text-left"}>Topic</th>
-                      {STATES.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
+                      {BAR_ORDER.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
                     </tr></thead>
                     <tbody className="bg-white divide-y divide-gray-100">
                       {DATA.topicStatus.map(function (t) {
@@ -668,7 +671,7 @@ function WorkflowUI(props) {
                           <tr key={t.code} className={"hover:bg-gray-50 " + (has ? "cursor-pointer" : "")}
                             onClick={has ? function () { var n = Object.assign({}, topicExp); n[t.code] = !open; setTopicExp(n); } : null}>
                             <td className={td + " font-medium"}>{has ? (open ? "▾ " : "▸ ") : ""}{t.code} · {TOPIC_NAMES[t.code] || t.code}</td>
-                            {STATES.map(function (s) {
+                            {BAR_ORDER.map(function (s) {
                               return <td key={s} className={td + " text-right" + (s === "completed" ? " text-green-700 font-medium" : " text-gray-600")}>{p(t[s], t.total)}</td>;
                             })}
                           </tr>
@@ -686,7 +689,7 @@ function WorkflowUI(props) {
                                     <thead className="bg-white"><tr>
                                       <th className={th + " text-left"}>Cohort</th>
                                       <th className={th + " text-left"}>Distribution</th>
-                                      {STATES5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
+                                      {BAR_ORDER5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
                                     </tr></thead>
                                     <tbody className="divide-y divide-gray-100">
                                       {cohRows.map(function (rc) {
@@ -695,13 +698,13 @@ function WorkflowUI(props) {
                                             <td className={td + " text-gray-700"}>{rc.cohort} <span className="text-gray-400">(n={rc.total})</span></td>
                                             <td className={td}>
                                               <div style={{ display: "flex", width: 120, height: 10, borderRadius: 2, overflow: "hidden", border: "1px solid #e5e7eb" }}>
-                                                {STATES5.map(function (s) {
+                                                {BAR_ORDER5.map(function (s) {
                                                   var w = rc.total ? (100 * rc[s] / rc.total) : 0;
                                                   return w > 0 ? <div key={s} title={STATE_LABEL[s] + ": " + (Math.round(10 * w) / 10) + "%"} style={{ width: w + "%", backgroundColor: STATE_COLOR[s] }}></div> : null;
                                                 })}
                                               </div>
                                             </td>
-                                            {STATES5.map(function (s) {
+                                            {BAR_ORDER5.map(function (s) {
                                               return <td key={s} className={td + " text-right" + (s === "completed" ? " text-green-700" : " text-gray-500")}>{p(rc[s], rc.total)}</td>;
                                             })}
                                           </tr>
@@ -896,7 +899,7 @@ function WorkflowUI(props) {
                         <th key={i + "tr"} className={th + " text-right border-b border-gray-300 " + gb} title="Bot-triggered FLWs · % = Triggered ÷ Eligible">Trig/%</th>,
                         <th key={i + "s"} className={th + " text-right border-b border-gray-300 " + gb} title="FLWs with an OCS session · % = Started ÷ Eligible">Start/%</th>,
                         <th key={i + "c"} className={th + " text-right border-b border-gray-300 " + gb} title="Completed (session reached interview_complete) · % = Completed ÷ Started">Compl/%</th>,
-                        <th key={i + "ci"} className={th + " text-right border-b border-gray-300 " + gb} title="Overall completed = Completed ÷ # Initiated (share of everyone who initiated)">Overall%</th>,
+                        <th key={i + "ci"} className={th + " text-right border-b border-gray-300 " + gb} title="Overall completed = Completed ÷ # Initiated (share of everyone who initiated)">Overall Compl%</th>,
                       ];
                     })}
                   </tr>
@@ -963,7 +966,7 @@ function WorkflowUI(props) {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50"><tr>
                     <th className={th + " text-left"}>Subgroup</th><th className={th + " text-right"}>FLWs Started</th>
-                    <th className={th + " text-right"}>Interviews Started</th><th className={th + " text-right"}>Completed</th>
+                    <th className={th + " text-right"}>Interviews Started</th><th className={th + " text-right"}>Interviews Completed</th>
                     <th className={th + " text-right"}>% Completed</th><th className={th + " text-right"}>Avg words / FLW msg</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
@@ -992,7 +995,7 @@ function WorkflowUI(props) {
                     <th className={th + " text-left"}>Topic</th><th className={th + " text-left"}>Name</th>
                     <th className={th + " text-right"} title="Number of questions in this topic's interview (per the design)"># Questions</th>
                     <th className={th + " text-right"}>FLWs Started</th><th className={th + " text-right"}>Interviews Started</th>
-                    <th className={th + " text-right"}>Completed</th><th className={th + " text-right"}>% Completed</th>
+                    <th className={th + " text-right"}>Interviews Completed</th><th className={th + " text-right"}>% Completed</th>
                     <th className={th + " text-right"}>Avg words / FLW msg</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
@@ -1021,7 +1024,7 @@ function WorkflowUI(props) {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50"><tr>
                     <th className={th + " text-left"}>Arm</th><th className={th + " text-right"}>FLWs Started</th>
-                    <th className={th + " text-right"}>Interviews Started</th><th className={th + " text-right"}>Completed</th>
+                    <th className={th + " text-right"}>Interviews Started</th><th className={th + " text-right"}>Interviews Completed</th>
                     <th className={th + " text-right"}>% Completed</th><th className={th + " text-right"}>Avg words / FLW msg</th>
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-100">
