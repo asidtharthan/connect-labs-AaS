@@ -9,6 +9,7 @@ Chains the existing build steps into one hands-off run for the scheduler (Celery
   5. build_dashboard_data.py     -> dashboard_data.json
   6. audit_e2e.py + build_dashboard_data_audit.py   (ABORTS the run if any check fails)
   7. inject dashboard_data.json into docs/interviews_render_template.js -> docs/interviews_master_v3_render.js
+  7b. brutal_verify.py   independent re-derivation from RAW sources + cross-place + render-binding gate (ABORTS on mismatch)
   8. (--push)         update workflow 3962 render_code on Labs   [needs CONNECT_TOKEN/PAT]
 
 Defaults: steps 1-3 are SKIPPED (uses existing local source files) so the build+audit+inject
@@ -276,6 +277,13 @@ def main():
 
     # 7: inject
     render = inject()
+
+    # 7b: brutal independent re-verification — re-parses RAW sources + re-aggregates from
+    # master_4src.csv with its own code (imports no build script), then checks every dashboard
+    # number, cross-place consistency, and that the injected render embeds dashboard_data.json
+    # verbatim. Hard gate: aborts before publishing if anything is off. Freshness asserts here
+    # are enforced only when INTERVIEWS_STRICT_FRESHNESS=1 (set in the daily CI after a live pull).
+    run("7b. brutal independent re-verification", [PY, "brutal_verify.py"])
 
     # 8: push (gated on token)
     pushed_version = None
