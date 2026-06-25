@@ -239,8 +239,11 @@ cells = list(cell.values())
 # D-counts
 chk("counts.master_rows", DD["counts"]["master_rows"] == len(R), f"{DD['counts']['master_rows']} == {len(R)}")
 chk("counts.flws", DD["counts"]["flws"] == len({r["connect_id"] for r in R}), str(DD["counts"]["flws"]))
-chk("counts.started (rows)", DD["counts"]["started"] == sum(1 for r in R if r["is_started"] == "Y"), str(DD["counts"]["started"]))
-chk("counts.completed (rows)", DD["counts"]["completed"] == sum(1 for r in R if r["is_completed"] == "Y"), str(DD["counts"]["completed"]))
+chk("counts.started == unique started interviews (cells)", DD["counts"]["started"] == len({(r["connect_id"], r["cohort_id"], r["interview_n"]) for r in R if r["is_started"] == "Y"}), str(DD["counts"]["started"]))
+chk("counts.completed == unique completed interviews (cells)", DD["counts"]["completed"] == len({(r["connect_id"], r["cohort_id"], r["interview_n"]) for r in R if r["is_completed"] == "Y"}), str(DD["counts"]["completed"]))
+_t1o = next((x for x in DD["table1"] if x["key"] == "Overall"), {})
+chk("counts.started == Breakdowns Overall ist (tie-out)", DD["counts"]["started"] == _t1o.get("ist"), f"{DD['counts']['started']} == {_t1o.get('ist')}")
+chk("counts.completed == Breakdowns Overall icmp (tie-out)", DD["counts"]["completed"] == _t1o.get("icmp"), f"{DD['counts']['completed']} == {_t1o.get('icmp')}")
 
 # D-connectFunnel started/completed/initiated
 sg_started = defaultdict(set); sg_completed = defaultdict(set)
