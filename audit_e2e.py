@@ -3,6 +3,7 @@ reconciled against (1) the 10-Jun master baseline, (2) independent recompute, (3
 workbook. Prints PASS/FAIL per check + a final accuracy summary. No spot checks.
 """
 import csv as _csv
+import glob
 import json
 import os
 from collections import Counter, defaultdict
@@ -52,7 +53,10 @@ print("=" * 90)
 # Baseline comparison is OPTIONAL — the 10-Jun baseline holds participant ids and is not shipped
 # server-side. When absent, the integrity invariants below still run (they need only bm.rows).
 if os.path.exists("master_v7_2026-06-10.csv"):
-    base = {r["trigger_form_id"]: r for r in _csv.DictReader(open("master_v7_2026-06-10.csv", encoding="utf-8"))}
+    # exclude the intentionally-removed test accounts from the baseline too, else their (now-dropped)
+    # baseline rows look like a coverage regression. See bm.EXCLUDE_FLWS.
+    base = {r["trigger_form_id"]: r for r in _csv.DictReader(open("master_v7_2026-06-10.csv", encoding="utf-8"))
+            if r["connect_id"] not in bm.EXCLUDE_FLWS}
     live = {r["trigger_form_id"]: r for r in bm.rows}
     shared = set(base) & set(live)
     only_base = set(base) - set(live)
@@ -399,12 +403,42 @@ else:
                 except (TypeError, ValueError):
                     continue
                 gw_funnel[(sg, n)] = (elig, trig, start, comp)
+    # GW predates the test-account cleanup, so it still counts the EXCLUDE_FLWS. Subtract their
+    # contribution so parity reflects post-cleanup expectations while still catching any OTHER
+    # (unexplained) downward drift. Interview cells come from the same-era 10-Jun baseline; initiated
+    # (elig) from raw welcome forms (bm already dropped the excluded FLWs).
+    exc_iv = defaultdict(lambda: {"t": set(), "s": set(), "c": set()})
+    if os.path.exists("master_v7_2026-06-10.csv"):
+        for r in _csv.DictReader(open("master_v7_2026-06-10.csv", encoding="utf-8")):
+            if r["connect_id"] not in bm.EXCLUDE_FLWS:
+                continue
+            k = (r["subgroup"], int(r["interview_n"]))
+            exc_iv[k]["t"].add(r["connect_id"])
+            if r["is_started"] == "Y": exc_iv[k]["s"].add(r["connect_id"])
+            if r["is_completed"] == "Y": exc_iv[k]["c"].add(r["connect_id"])
+    exc_init = defaultdict(set)
+    for _p in glob.glob("hq_pull_full/*welcome_click_start.jsonl"):
+        for _line in open(_p, encoding="utf-8"):
+            try:
+                _s = json.loads(_line)
+            except Exception:
+                continue
+            _f = _s.get("form", {}) or {}
+            _m = _f.get("meta", {}) if isinstance(_f.get("meta"), dict) else {}
+            _cid = (_f.get("connect_id") or _m.get("username") or _s.get("username") or "").strip()
+            if _cid in bm.EXCLUDE_FLWS:
+                _sg = bm.cohort_to_sg((_f.get("cohort_id") or "").strip())
+                if _sg:
+                    exc_init[_sg].add(_cid)
     exact = drift_fwd = drift_other = 0
     for row in payload["funnel"]:
         key = (row["sg"], row["n"])
         if key not in gw_funnel:
             continue
         ge, gt, gs, gc = gw_funnel[key]
+        _ex = exc_iv.get(key, {"t": set(), "s": set(), "c": set()})
+        ge -= len(exc_init.get(row["sg"], set()))  # elig = # initiated; drop excluded initiated
+        gt -= len(_ex["t"]); gs -= len(_ex["s"]); gc -= len(_ex["c"])
         le, lt, ls, lc = row["elig"], row["trig"], row["started"], row["completed"]
         if (ge, gt, gs, gc) == (le, lt, ls, lc):
             exact += 1

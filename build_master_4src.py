@@ -129,6 +129,25 @@ def is_test_cohort(c):
     return bool(c) and bool(_TEST_COHORT_RE.search(str(c)))
 
 
+# FLWs with interview activity (HQ triggers/sessions) but ZERO Connect enrollment across ALL interview
+# opportunities — verified 2026-06-25: non-hex connect_ids, active for ~2.5 months (since early April)
+# yet never present in any Connect user_data snapshot (06-22/06-24/06-25). Confirmed non-enrolled
+# test/manual accounts; dropped from every source so the dashboard counts only real Connect-enrolled
+# FLWs. Explicit list (NOT a blanket "no-Connect -> drop" rule) so a snapshot-timing gap can't silently
+# drop a real FLW. See brutal-revalidation-2026-06-25 memory.
+EXCLUDE_FLWS = {
+    "10wcuh1u3s6595okhmfd", "5ej4jqjha0x1f3tbc08y", "7xhpeda8ipsouip6ynyk", "b6vt2wzi8slth6mlag1g",
+    "m0i5azsqk7mzixp1bzib", "m33dn33c5vyf8es9kagq", "m6svr4qy3gemxuj2inoe", "rfxkcx7nbom2whml8mbb",
+    "sqaktdfxupepdvt90t3f", "v3urwjuzqjxp3njyb5uz", "va7vh76am0m83h0rzu01", "wwnvw4diurrzuy32vba7",
+    "xo1n01inul0ofr9z32fa", "y6xjjw4xilga8d1qvaab",
+}
+# Cross-arm cohort mis-tag fix (1 FLW): 6c1ff0cb… was Connect-enrolled in 1ABT1EA1 (ABT1-A) but
+# HQ-triggered + completed ALL interviews under 1ABT1EB1 (ABT1-B). ABT1-A/B share identical topics so
+# OCS can't distinguish the arms; align his Connect record to the arm where 100% of his interviews ran
+# (as-treated). Maps (connect_id, original_cohort) -> corrected_cohort, applied to the Connect snapshot.
+CONNECT_COHORT_OVERRIDE = {("6c1ff0cb57e27e780339", "1ABT1EA1"): "1ABT1EB1"}
+
+
 # ---- live interview design from the CCHQ `interview_schedule` lookup (the bot's runtime truth) ----
 # pull_hq_interview_schedule.py writes _interview_schedule.json = {cohort_id: [{n, topic, offset_days}]}.
 # We derive SUBGROUP_DESIGN (topics + cadence) per subgroup from it, falling back to _FALLBACK_DESIGN
@@ -203,7 +222,12 @@ def _iter_connect_sources():
     if use_snap and SNAPSHOT.exists():
         by_cohort = defaultdict(list)
         for row in clean_csv(SNAPSHOT):
-            by_cohort[(row.get("cohort_id") or "").strip()].append(row)
+            u = (row.get("username") or "").strip()
+            if u in EXCLUDE_FLWS:
+                continue
+            c = (row.get("cohort_id") or "").strip()
+            c = CONNECT_COHORT_OVERRIDE.get((u, c), c)  # cross-arm mis-tag correction
+            by_cohort[c].append(row)
         print(f"[1] Connect: consolidated snapshot {SNAPSHOT.name} ({len(by_cohort)} cohorts)")
         yield from by_cohort.items()
     else:
@@ -272,6 +296,8 @@ for domain in ALL_DOMAINS:
             form = sub.get("form", {})
             meta = form.get("meta", {}) if isinstance(form.get("meta"), dict) else {}
             cid = (form.get("connect_id") or meta.get("username") or sub.get("username") or "").strip()
+            if cid in EXCLUDE_FLWS:  # confirmed non-enrolled test/manual accounts — drop from all HQ legs
+                continue
             if ft == "flw_registration":
                 if cid:
                     flw_registered.add(cid)
@@ -393,6 +419,7 @@ with out.open("w", newline="", encoding="utf-8") as f:
     w.writeheader()
     w.writerows(rows)
 print(f"\nwrote {out.name}: {len(rows)} rows, {len({r['connect_id'] for r in rows})} FLWs")
+print(f"  [cleanup] excluded {len(EXCLUDE_FLWS)} non-enrolled FLWs; re-tagged {len(CONNECT_COHORT_OVERRIDE)} cross-arm Connect record(s)")
 if unmapped_cohorts:
     print(f"[!] {len(unmapped_cohorts)} UNMAPPED cohort(s) (new program type? add a SUBGROUP_DESIGN entry): "
           f"{sorted(unmapped_cohorts)}")
