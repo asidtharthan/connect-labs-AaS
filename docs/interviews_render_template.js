@@ -122,7 +122,7 @@ function WorkflowUI(props) {
           backgroundColor: col, fill: false, tension: 0.2, spanGaps: false,
           borderDash: inProgress ? [6, 5] : undefined }; }) },
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any subgroup in the legend below to show / hide its line", color: "#4f46e5", font: { weight: "bold", size: 11 } } } },
+        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom", labels: { usePointStyle: true, pointStyle: "line" }, title: { display: true, text: "⇄ Toggle: click any subgroup in the legend below to show / hide its line", color: "#4f46e5", font: { weight: "bold", size: 11 } } } },
         scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
