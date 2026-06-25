@@ -337,7 +337,7 @@ function WorkflowUI(props) {
         <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-sm">
           <span><b>{c.cohorts}</b> cohorts</span>
           <span><b>{c.master_rows}</b> master rows</span>
-          <span><b>{c.flws}</b> FLWs</span>
+          <span><b>{c.flws}</b> unique FLWs</span>
           <span><b>{c.started}</b> interviews started</span>
           <span><b>{c.completed}</b> completed</span>
         </div>
@@ -368,7 +368,7 @@ function WorkflowUI(props) {
         {activeTab === "overview" && (
           <div className="p-4 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[["Cohorts", c.cohorts], ["FLWs", c.flws], ["Interviews started", c.started],
+              {[["Cohorts", c.cohorts], ["Unique FLWs", c.flws], ["Interviews started", c.started],
                 ["Interviews completed", c.completed], ["% completed", pctOf(c.completed, c.started)]].map(function (kv) {
                 return (
                   <div key={kv[0]} className="bg-gray-50 rounded-lg p-3">
