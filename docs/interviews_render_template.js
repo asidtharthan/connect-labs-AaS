@@ -74,7 +74,7 @@ function WorkflowUI(props) {
     "started-not-completed": "Started, not completed", "completed": "Completed" };
   var STATE_COLOR = { "not-applicable": "#e5e7eb", "not-available-yet": "#6366f1",
     "available-not-started": "#f59e0b", "available-missed-overdue": "#b91c1c",
-    "started-not-completed": "#db2777", "completed": "#16a34a" };
+    "started-not-completed": "#06b6d4", "completed": "#16a34a" };
   var STATE_DEF = {
     "not-applicable": "topic isn't part of this cohort's design",
     "not-available-yet": "in the cohort, but not yet released per today's date, the topic's place in the schedule, and the cohort's training date",
