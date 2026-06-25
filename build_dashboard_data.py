@@ -86,8 +86,18 @@ for t in payload["topic_status"]:
     topic_status.append(row)
 
 # ---- counts ----
-tot_started = sum(1 for r in bm.rows if r["is_started"] == "Y")
-tot_completed = sum(1 for r in bm.rows if r["is_completed"] == "Y")
+# Count UNIQUE interviews (FLW × cohort × interview position), not bot-trigger rows, so a duplicate
+# trigger for the same interview isn't double-counted. Ties the Overview headline to the Breakdowns /
+# Full-Retention tables, which also count unique interviews (table1 Overall ist/icmp).
+_started_cells, _completed_cells = set(), set()
+for r in bm.rows:
+    _k = (r["connect_id"], r["cohort_id"], r["interview_n"])
+    if r["is_started"] == "Y":
+        _started_cells.add(_k)
+    if r["is_completed"] == "Y":
+        _completed_cells.add(_k)
+tot_started = len(_started_cells)
+tot_completed = len(_completed_cells)
 counts = {
     "cohorts": payload["counts"]["cohorts"],
     "flws": payload["counts"]["flws"],

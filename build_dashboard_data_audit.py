@@ -200,11 +200,11 @@ uflw = len({r["connect_id"] for r in bm.rows})
 chk("counts.flws == unique connect_ids", dd["counts"]["flws"] == uflw, f"{dd['counts']['flws']} == {uflw}")
 ucoh = len({r["cohort_id"] for r in bm.rows})
 chk("counts.cohorts == unique cohort_ids", dd["counts"]["cohorts"] == ucoh, f"{dd['counts']['cohorts']} == {ucoh}")
-ts2 = sum(1 for r in bm.rows if r["is_started"] == "Y")
-tc2 = sum(1 for r in bm.rows if r["is_completed"] == "Y")
-chk("counts.started == master started rows", dd["counts"]["started"] == ts2, f"{dd['counts']['started']} == {ts2}")
+ts2 = len({(r["connect_id"], r["cohort_id"], r["interview_n"]) for r in bm.rows if r["is_started"] == "Y"})
+tc2 = len({(r["connect_id"], r["cohort_id"], r["interview_n"]) for r in bm.rows if r["is_completed"] == "Y"})
+chk("counts.started == unique started interviews", dd["counts"]["started"] == ts2, f"{dd['counts']['started']} == {ts2}")
 chk(
-    "counts.completed == master completed rows",
+    "counts.completed == unique completed interviews",
     dd["counts"]["completed"] == tc2,
     f"{dd['counts']['completed']} == {tc2}",
 )
