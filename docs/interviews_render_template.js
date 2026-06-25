@@ -38,6 +38,7 @@ function WorkflowUI(props) {
   var gso = React.useState({ key: "", dir: "asc" }); var gSort = gso[0], setGSort = gso[1];   // sessions table sort
   var dimp = React.useState(false);
   var deImpact = dimp[0], setDeImpact = dimp[1];   // item 8: raw vs de-impacted (penult/last artifact)
+  var lsg = React.useState({}); var hidSg = lsg[0], setHidSg = lsg[1];   // funnels line chart: hidden subgroups (custom legend toggle)
   var lineRef = React.useRef(null), lineInst = React.useRef(null);
   var barRef = React.useRef(null), barInst = React.useRef(null);
 
@@ -119,14 +120,14 @@ function WorkflowUI(props) {
         // a subgroup still accumulating any interview (e.g. PANEL) → dot its ENTIRE line; fully settled → solid
         var inProgress = st.some(function (x) { return x === "in-progress"; });
         return { label: s.sg + " (n=" + s.base + ")", data: pts, borderColor: col,
-          backgroundColor: col, fill: false, tension: 0.2, spanGaps: false,
-          borderDash: inProgress ? [6, 5] : undefined }; }) },
+          backgroundColor: col, fill: false, tension: 0.2, spanGaps: false, borderWidth: 3,
+          hidden: !!hidSg[s.sg], borderDash: inProgress ? [8, 5] : undefined }; }) },
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { position: "bottom", labels: { usePointStyle: true, pointStyle: "line" }, title: { display: true, text: "⇄ Toggle: click any subgroup in the legend below to show / hide its line", color: "#4f46e5", font: { weight: "bold", size: 11 } } } },
+        plugins: { title: { display: true, text: "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { display: false } },
         scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
-  }, [activeTab, deImpact]);
+  }, [activeTab, deImpact, hidSg]);
 
   // ---- stacked bar chart (Table View > Topic completion) ----
   React.useEffect(function () {
@@ -742,6 +743,25 @@ function WorkflowUI(props) {
               ) : null}
             </div>
             <div style={{ height: "380px" }}><canvas ref={lineRef}></canvas></div>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 px-2">
+              <span className="text-xs font-semibold text-indigo-600 mr-1">⇄ Toggle: click a subgroup to show / hide its line</span>
+              {DATA.lineSeries.map(function (s) {
+                var col = SG_COLOR[s.sg] || "#9ca3af";
+                var dashed = (s.status || []).some(function (x) { return x === "in-progress"; });
+                var off = !!hidSg[s.sg];
+                return (
+                  <button key={s.sg} type="button"
+                    onClick={function () { var n = Object.assign({}, hidSg); n[s.sg] = !n[s.sg]; setHidSg(n); }}
+                    title={off ? "Hidden — click to show" : "Click to hide" + (dashed ? " · dashed = still in progress" : "")}
+                    className={"inline-flex items-center gap-1.5 text-xs " + (off ? "opacity-40 line-through" : "text-gray-700 hover:text-gray-900")}>
+                    <svg width="32" height="12" style={{ flexShrink: 0 }}>
+                      <line x1="1" y1="6" x2="31" y2="6" stroke={col} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={dashed ? "6,4" : "none"} />
+                    </svg>
+                    {s.sg} (n={s.base})
+                  </button>
+                );
+              })}
+            </div>
 
             <Legend title="What these columns mean">
               <div><b>Connect funnel:</b> Invited → Accepted → Started/Completed Learn → Claimed (downloaded the app) → FLW Reg (HQ) (registered in CommCare HQ) → # Initiated (clicked any Welcome/start form).</div>
