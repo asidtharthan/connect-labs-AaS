@@ -581,6 +581,7 @@ function WorkflowUI(props) {
             {tableSub === "topiccomplete" && (
               <div className="space-y-4">
                 <p className="text-xs text-gray-400 px-1">Per-FLW status by topic, across all claimed FLWs (each topic stacks to 100%). Click a topic to break it down by cohort.</p>
+                <p className="text-xs text-gray-400 px-1">Each bar counts <span className="font-medium text-gray-500">enrollment slots</span> for that topic (claimed FLW × cohort — the completion-rate base), not unique FLWs. It includes people enrolled but not yet started, and counts anyone in two cohorts twice, so a bar can exceed the Overview unique-FLW total.</p>
                 <div className="flex flex-wrap items-center gap-2 px-1">
                   {subBtn(topicChart, "stacked", setTopicChart, "Stacked bar")}
                   {subBtn(topicChart, "scoreboard", setTopicChart, "Completion scoreboard")}
