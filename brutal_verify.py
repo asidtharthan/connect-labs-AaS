@@ -87,6 +87,8 @@ EXCLUDE_FLWS = {
     "m0i5azsqk7mzixp1bzib", "m33dn33c5vyf8es9kagq", "m6svr4qy3gemxuj2inoe", "rfxkcx7nbom2whml8mbb",
     "sqaktdfxupepdvt90t3f", "v3urwjuzqjxp3njyb5uz", "va7vh76am0m83h0rzu01", "wwnvw4diurrzuy32vba7",
     "xo1n01inul0ofr9z32fa", "y6xjjw4xilga8d1qvaab",
+    # 2WT/ABT3 pre-launch QA accounts (literal test ids; activity but never Connect-enrolled; 2026-07-06)
+    "test_34", "test_abt3", "test_abt3_eha",
 }
 CONNECT_COHORT_OVERRIDE = {("6c1ff0cb57e27e780339", "1ABT1EA1"): "1ABT1EB1"}
 

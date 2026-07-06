@@ -160,6 +160,9 @@ EXCLUDE_FLWS = {
     "m0i5azsqk7mzixp1bzib", "m33dn33c5vyf8es9kagq", "m6svr4qy3gemxuj2inoe", "rfxkcx7nbom2whml8mbb",
     "sqaktdfxupepdvt90t3f", "v3urwjuzqjxp3njyb5uz", "va7vh76am0m83h0rzu01", "wwnvw4diurrzuy32vba7",
     "xo1n01inul0ofr9z32fa", "y6xjjw4xilga8d1qvaab",
+    # 2WT/ABT3 pre-launch QA accounts (literal test ids; HQ interview activity but never Connect-enrolled
+    # — absent from the live claimed set and the render; verified 2026-07-06).
+    "test_34", "test_abt3", "test_abt3_eha",
 }
 # Cross-arm cohort mis-tag fix (1 FLW): 6c1ff0cb… was Connect-enrolled in 1ABT1EA1 (ABT1-A) but
 # HQ-triggered + completed ALL interviews under 1ABT1EB1 (ABT1-B). ABT1-A/B share identical topics so
