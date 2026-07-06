@@ -22,6 +22,8 @@ function WorkflowUI(props) {
   var topicExp = tex[0], setTopicExp = tex[1];   // expanded topics in topic-completion drilldown
   var tcc = React.useState("stacked");
   var topicChart = tcc[0], setTopicChart = tcc[1];   // topic-completion chart type: stacked | scoreboard | heatmap
+  var tgm = React.useState("topic");
+  var topicGroupMode = tgm[0], setTopicGroupMode = tgm[1];   // topic-completion grouping: topic | theme (GW consolidated bars)
   var tcm = React.useState("pct");
   var tcMode = tcm[0], setTcMode = tcm[1];   // topic-completion value mode: pct | count (raw interview counts)
   var gss = React.useState("");
@@ -98,6 +100,43 @@ function WorkflowUI(props) {
   // FLW × Topic matrix cell glyphs, indexed by STATES order (0 not-applicable … 5 completed)
   var CELL_GLYPH = ["", "·", "○", "!", "◐", "✓"];
   var MATRIX_TOPIC_ORDER = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "8S", "8L", "10S", "10L", "11S", "11L", "13L"];
+  // GiveWell thematic grouping: pool related topics into one bar. Static + forward-looking
+  // (already includes topics that get data later, e.g. ABT3 8S/8L/10S/10L/11S/11L/13L, 2WT 14).
+  // A topic not listed here renders as its own bar. THEME_ORDER = display order of theme bars.
+  var THEME_ORDER = ["Malaria", "Water & Diarrhea", "Community & FLW Profile", "Antibiotics and ACT Use", "Medicine Quality & Counterfeiting"];
+  var TOPIC_GROUP = {
+    "B": "Malaria", "1": "Malaria", "2": "Malaria", "10": "Malaria", "10S": "Malaria", "10L": "Malaria", "14": "Malaria",
+    "D": "Water & Diarrhea", "11": "Water & Diarrhea", "11S": "Water & Diarrhea", "11L": "Water & Diarrhea",
+    "E": "Community & FLW Profile", "12": "Community & FLW Profile",
+    "8": "Antibiotics and ACT Use", "8S": "Antibiotics and ACT Use", "8L": "Antibiotics and ACT Use",
+    "9": "Medicine Quality & Counterfeiting", "13": "Medicine Quality & Counterfeiting", "13L": "Medicine Quality & Counterfeiting"
+  };
+  // Pool DATA.topicStatus rows into theme bars (interview-level sum). Topics not in a theme stay
+  // individual. Returns the SAME row shape (+ a `label`) so the charts reuse their existing code.
+  function groupedTopicStatus(rows) {
+    var STATE6 = ["not-applicable", "not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
+    var byKey = {}, order = [];
+    rows.forEach(function (t) {
+      var theme = TOPIC_GROUP[t.code];
+      var key = theme || ("#" + t.code);   // "#code" keeps ungrouped topics distinct from theme labels
+      if (!byKey[key]) {
+        byKey[key] = { code: theme || t.code, name: theme || t.name, isTheme: !!theme,
+          label: theme || (t.code + " · " + (TOPIC_NAMES[t.code] || t.code)), total: 0, applicable: 0 };
+        STATE6.forEach(function (s) { byKey[key][s] = 0; });
+        order.push(key);
+      }
+      var g = byKey[key];
+      g.total += t.total || 0; g.applicable += t.applicable || 0;
+      STATE6.forEach(function (s) { g[s] += t[s] || 0; });
+    });
+    return order.map(function (k) { return byKey[k]; }).sort(function (a, b) {
+      var ai = a.isTheme ? THEME_ORDER.indexOf(a.name) : 100 + MATRIX_TOPIC_ORDER.indexOf(a.code);
+      var bi = b.isTheme ? THEME_ORDER.indexOf(b.name) : 100 + MATRIX_TOPIC_ORDER.indexOf(b.code);
+      return ai - bi;
+    });
+  }
+  // The row set the topic-completion charts render: grouped-by-theme or raw per-topic.
+  function topicRowsFor(rows, mode) { return mode === "theme" ? groupedTopicStatus(rows) : rows; }
 
   var th = "px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider";
   var td = "px-3 py-2 whitespace-nowrap text-sm text-gray-800";
@@ -140,21 +179,22 @@ function WorkflowUI(props) {
     // counts mode: drop "not applicable" (it isn't an interview count) and fit the axis to the
     // largest applicable bar — removes the empty gap to the axis. % mode keeps all 6 (stacks to 100).
     var barStates = isCount ? BAR_ORDER5 : BAR_ORDER;
-    var maxApp = Math.max.apply(null, DATA.topicStatus.map(function (t) { return t.applicable || 0; })) || 1;
+    var tsRows = topicRowsFor(DATA.topicStatus, topicGroupMode);
+    var maxApp = Math.max.apply(null, tsRows.map(function (t) { return t.applicable || 0; })) || 1;
     barInst.current = new window.Chart(barRef.current.getContext("2d"), {
       type: "bar",
-      data: { labels: DATA.topicStatus.map(function (t) { return t.code + " · " + (TOPIC_NAMES[t.code] || t.code); }),
+      data: { labels: tsRows.map(function (t) { return t.label || (t.code + " · " + (TOPIC_NAMES[t.code] || t.code)); }),
         datasets: barStates.map(function (st) {
           return { label: STATE_LABEL[st],
-            data: DATA.topicStatus.map(function (t) { return isCount ? (t[st] || 0) : (t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0); }),
+            data: tsRows.map(function (t) { return isCount ? (t[st] || 0) : (t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0); }),
             backgroundColor: STATE_COLOR[st] }; }) },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
-        plugins: { title: { display: true, text: isCount ? "FLW status distribution by topic — # of applicable FLWs" : "FLW status distribution by topic — % of claimed FLWs (stacks to 100%)" }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any status in the legend below to show / hide it in the chart", color: "#4f46e5", font: { weight: "bold", size: 11 } } },
+        plugins: { title: { display: true, text: (topicGroupMode === "theme" ? "FLW status distribution by THEME (related topics pooled)" : "FLW status distribution by topic") + (isCount ? " — # of applicable FLWs" : " — % of claimed FLWs (stacks to 100%)") }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any status in the legend below to show / hide it in the chart", color: "#4f46e5", font: { weight: "bold", size: 11 } } },
           tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + (isCount ? "" : "%"); } } } },
         scales: { x: { stacked: true, max: isCount ? maxApp : 100, title: { display: true, text: isCount ? "# of FLWs the topic applies to" : "% of claimed FLWs" } }, y: { stacked: true, ticks: { autoSkip: false, font: { size: 10 } } } } }
     });
     return function () { if (barInst.current) { barInst.current.destroy(); barInst.current = null; } };
-  }, [activeTab, tableSub, topicChart, tcMode]);
+  }, [activeTab, tableSub, topicChart, tcMode, topicGroupMode]);
 
   function subBtn(cur, val, set, label) {
     var on = cur === val;
@@ -589,10 +629,17 @@ function WorkflowUI(props) {
                   {subBtn(topicChart, "scoreboard", setTopicChart, "Completion scoreboard")}
                   {subBtn(topicChart, "heatmap", setTopicChart, "Heatmap")}
                   <span className="mx-1 text-gray-300">|</span>
+                  <span className="text-xs text-gray-400">Group:</span>
+                  {subBtn(topicGroupMode, "topic", setTopicGroupMode, "By topic")}
+                  {subBtn(topicGroupMode, "theme", setTopicGroupMode, "By theme")}
+                  <span className="mx-1 text-gray-300">|</span>
                   <span className="text-xs text-gray-400">Show:</span>
                   {subBtn(tcMode, "pct", setTcMode, "%")}
                   {subBtn(tcMode, "count", setTcMode, "Raw counts")}
                 </div>
+                {topicGroupMode === "theme" && (
+                  <p className="text-xs text-gray-400 px-1">Related topics pooled into themes (interview-level sum): <span className="font-medium text-gray-500">Malaria</span> = B,1,2,10,10S,10L,14 · <span className="font-medium text-gray-500">Water &amp; Diarrhea</span> = D,11,11S,11L · <span className="font-medium text-gray-500">Community &amp; FLW Profile</span> = E,12 · <span className="font-medium text-gray-500">Antibiotics &amp; ACT Use</span> = 8,8S,8L · <span className="font-medium text-gray-500">Medicine Quality</span> = 9,13,13L. Topics not in a theme stay individual.</p>
+                )}
                 <Legend title="Status definitions (in chart order)">
                   {BAR_ORDER.map(function (s) {
                     return (
@@ -604,12 +651,12 @@ function WorkflowUI(props) {
                   })}
                 </Legend>
                 {topicChart === "stacked" && (
-                  <div style={{ height: Math.max(440, (DATA.topicStatus.length || 12) * 30) + "px" }}><canvas ref={barRef}></canvas></div>
+                  <div style={{ height: Math.max(440, (topicRowsFor(DATA.topicStatus, topicGroupMode).length || 12) * 30) + "px" }}><canvas ref={barRef}></canvas></div>
                 )}
                 {topicChart === "scoreboard" && (
                   <div className="px-1">
-                    <p className="text-xs text-gray-400 mb-2">% completed of the FLWs each topic applies to (excludes the not-applicable group), sorted high → low.</p>
-                    {DATA.topicStatus.slice().sort(function (a, b) {
+                    <p className="text-xs text-gray-400 mb-2">% completed of the FLWs each {topicGroupMode === "theme" ? "theme" : "topic"} applies to (excludes the not-applicable group), sorted high → low.</p>
+                    {topicRowsFor(DATA.topicStatus, topicGroupMode).slice().sort(function (a, b) {
                       var pa = a.applicable ? a.completed / a.applicable : -1;
                       var pb = b.applicable ? b.completed / b.applicable : -1;
                       return pb - pa;
@@ -617,7 +664,7 @@ function WorkflowUI(props) {
                       var pct = t.applicable ? Math.round(1000 * t.completed / t.applicable) / 10 : null;
                       return (
                         <div key={t.code} className="flex items-center gap-2 py-1">
-                          <div className="text-xs text-gray-600 truncate" style={{ width: "13rem", flexShrink: 0 }}>{t.code} · {TOPIC_NAMES[t.code] || t.code}</div>
+                          <div className="text-xs text-gray-600 truncate" style={{ width: "13rem", flexShrink: 0 }}>{t.label || (t.code + " · " + (TOPIC_NAMES[t.code] || t.code))}</div>
                           <div className="flex-1" style={{ background: "#f1f5f9", borderRadius: 4, height: 16, minWidth: 120 }}>
                             <div title={(pct == null ? "—" : pct + "%") + " completed"} style={{ width: (pct == null ? 0 : pct) + "%", background: STATE_COLOR["completed"], height: "100%", borderRadius: 4 }}></div>
                           </div>
@@ -630,18 +677,18 @@ function WorkflowUI(props) {
                 )}
                 {topicChart === "heatmap" && (
                   <div className="overflow-x-auto px-1">
-                    <p className="text-xs text-gray-400 mb-2">Each cell = % of applicable FLWs in that stage (darker = higher). Rows = topics, columns = the 5 applicable stages.</p>
+                    <p className="text-xs text-gray-400 mb-2">Each cell = % of applicable FLWs in that stage (darker = higher). Rows = {topicGroupMode === "theme" ? "themes" : "topics"}, columns = the 5 applicable stages.</p>
                     <table className="min-w-full border border-gray-200">
                       <thead className="bg-gray-50"><tr>
-                        <th className={th + " text-left"}>Topic</th>
+                        <th className={th + " text-left"}>{topicGroupMode === "theme" ? "Theme" : "Topic"}</th>
                         <th className={th + " text-right"}>Applies</th>
                         {BAR_ORDER5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
                       </tr></thead>
                       <tbody>
-                        {DATA.topicStatus.map(function (t) {
+                        {topicRowsFor(DATA.topicStatus, topicGroupMode).map(function (t) {
                           return (
                             <tr key={t.code}>
-                              <td className={td + " font-medium text-gray-700"}>{t.code} · {TOPIC_NAMES[t.code] || t.code}</td>
+                              <td className={td + " font-medium text-gray-700"}>{t.label || (t.code + " · " + (TOPIC_NAMES[t.code] || t.code))}</td>
                               <td className={td + " text-right text-gray-400"}>{t.applicable}</td>
                               {BAR_ORDER5.map(function (s) {
                                 var frac = t.applicable ? t[s] / t.applicable : 0;
