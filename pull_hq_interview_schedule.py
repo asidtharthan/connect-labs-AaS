@@ -38,6 +38,8 @@ _DEFAULT_DOMAINS = [
     "ccc-interview-panel-eha",
     "connect-int-ng-cowac-2wt",
     "connect-int-ng-eha-2wt",
+    "ccc-interview-abtest3-cow",
+    "ccc-interview-abtest3-eha",
 ]
 
 _creds_file = ROOT / ".hq_creds.json"
