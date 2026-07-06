@@ -41,6 +41,9 @@ ALL_DOMAINS = [
     # 2WT (2-Week Test) — separate domains, cohorts 2WTC1 (COWACDI) / 2WTE1 (EHA).
     "connect-int-ng-cowac-2wt",
     "connect-int-ng-eha-2wt",
+    # ABT3 (Interview Length A/B test) — separate domains, cohorts 3ABT3C* (COWACDI) / 3ABT3E* (EHA).
+    "ccc-interview-abtest3-cow",
+    "ccc-interview-abtest3-eha",
 ]
 
 # FALLBACK only — the live SUBGROUP_DESIGN is derived from the CommCare HQ `interview_schedule`
