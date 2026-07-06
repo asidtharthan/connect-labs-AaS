@@ -140,11 +140,13 @@ def main():
         print(f"opp catalog: {len(opps)} opportunities")
         rows, seen = [], set()
         for opp in opps:
-            m = re.match(r"^\[([^\]]+)\]", opp.get("name", "") or "")
-            if not m:
-                continue
-            cohort = m.group(1).strip()
-            if not _cohort_to_sg(cohort) or _is_test(cohort) or cohort in seen:
+            # Cohort id lives in [brackets] in the opp name. Historically at the START
+            # ("[1PE1] EHA Interviews"), but newer opps put it at the END
+            # ("INT - NG - EHA - 2WT - July26 [2WTE1]"). Scan every bracket group and take
+            # the first that maps to a known subgroup — robust to either convention.
+            groups = re.findall(r"\[([^\]]+)\]", opp.get("name", "") or "")
+            cohort = next((g.strip() for g in groups if _cohort_to_sg(g.strip()) and not _is_test(g.strip())), None)
+            if not cohort or cohort in seen:
                 continue
             seen.add(cohort)
             r = c.get(f"{BASE}/export/opportunity/{opp['id']}/user_data/")
