@@ -138,30 +138,36 @@ def main():
         data = cat.json()
         opps = data if isinstance(data, list) else data.get("opportunities", [])
         print(f"opp catalog: {len(opps)} opportunities")
-        rows, seen = [], set()
+        # Group opps by cohort. Cohort id lives in [brackets] in the opp name — historically
+        # at the START ("[1PE1] EHA Interviews"), but newer opps put it at the END
+        # ("INT - NG - EHA - 2WT - July26 [2WTE1]"). Scan every bracket group and take the
+        # first that maps to a known subgroup — robust to either convention.
+        opps_by_cohort = {}
         for opp in opps:
-            # Cohort id lives in [brackets] in the opp name. Historically at the START
-            # ("[1PE1] EHA Interviews"), but newer opps put it at the END
-            # ("INT - NG - EHA - 2WT - July26 [2WTE1]"). Scan every bracket group and take
-            # the first that maps to a known subgroup — robust to either convention.
             groups = re.findall(r"\[([^\]]+)\]", opp.get("name", "") or "")
             cohort = next((g.strip() for g in groups if _cohort_to_sg(g.strip()) and not _is_test(g.strip())), None)
-            if not cohort or cohort in seen:
-                continue
-            seen.add(cohort)
-            r = c.get(f"{BASE}/export/opportunity/{opp['id']}/user_data/")
-            if r.status_code != 200:
-                print(f"  {cohort} (opp {opp['id']}): user_data {r.status_code} — skipped")
-                continue
-            n0 = len(rows)
-            for row in csv.DictReader(io.StringIO(r.text)):
-                u = (row.get("username") or "").strip()
-                if not u:
+            if cohort:
+                opps_by_cohort.setdefault(cohort, []).append(opp)
+        # A cohort can have MULTIPLE opps (e.g. an empty duplicate + the real one). Pull each and
+        # keep the one with the MOST user_data rows so we never bind a cohort to an empty duplicate.
+        rows = []
+        for cohort, copps in opps_by_cohort.items():
+            best, best_opp = [], None
+            for opp in copps:
+                r = c.get(f"{BASE}/export/opportunity/{opp['id']}/user_data/")
+                if r.status_code != 200:
+                    print(f"  {cohort} (opp {opp['id']}): user_data {r.status_code} — skipped")
                     continue
+                opp_rows = [row for row in csv.DictReader(io.StringIO(r.text)) if (row.get("username") or "").strip()]
+                if len(opp_rows) > len(best):
+                    best, best_opp = opp_rows, opp["id"]
+            for row in best:
                 rows.append({col: (cohort if col == "cohort_id" else (row.get(col, "") or "")) for col in COLS})
-            print(f"  {cohort:10} (opp {opp['id']}): +{len(rows) - n0} rows")
+            suffix = f" (best of {len(copps)} opps)" if len(copps) > 1 else ""
+            print(f"  {cohort:10} (opp {best_opp}): +{len(best)} rows{suffix}")
     if not rows:
         sys.exit("No Connect rows pulled — keeping existing snapshot (graceful degrade)")
+    seen = {r["cohort_id"] for r in rows}
     with OUT.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=COLS)
         w.writeheader()

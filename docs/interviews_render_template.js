@@ -92,7 +92,8 @@ function WorkflowUI(props) {
       </details>
     );
   }
-  var SG_COLOR = { "TRS": "#6366f1", "TRE": "#0ea5e9", "ABT1-A": "#f59e0b", "ABT1-B": "#ef4444", "ABT2-A": "#10b981", "ABT2-B": "#8b5cf6", "PANEL": "#14b8a6", "ABT3-A": "#ec4899", "ABT3-B": "#f43f5e", "2WT": "#9333ea" };
+  // Maximally-distinct categorical palette (D3 category10) so every subgroup line is unambiguous.
+  var SG_COLOR = { "TRS": "#1f77b4", "TRE": "#17becf", "ABT1-A": "#2ca02c", "ABT1-B": "#d62728", "ABT2-A": "#9467bd", "ABT2-B": "#8c564b", "PANEL": "#e377c2", "ABT3-A": "#f58231", "ABT3-B": "#bcbd22", "2WT": "#334155" };
   // FLW × Topic matrix cell glyphs, indexed by STATES order (0 not-applicable … 5 completed)
   var CELL_GLYPH = ["", "·", "○", "!", "◐", "✓"];
   var MATRIX_TOPIC_ORDER = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"];
