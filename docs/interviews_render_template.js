@@ -26,6 +26,8 @@ function WorkflowUI(props) {
   var topicGroupMode = tgm[0], setTopicGroupMode = tgm[1];   // topic-completion grouping: topic | theme (GW consolidated bars)
   var tcm = React.useState("pct");
   var tcMode = tcm[0], setTcMode = tcm[1];   // topic-completion value mode: pct | count (raw interview counts)
+  var nam = React.useState("include");
+  var naMode = nam[0], setNaMode = nam[1];   // stacked %-bar: include | exclude "not applicable" (exclude -> rescale to 100% of applicable)
   var gss = React.useState("");
   var gSearch = gss[0], setGSearch = gss[1];   // granular session search box
   var gpp = React.useState(0);
@@ -176,9 +178,11 @@ function WorkflowUI(props) {
     if (!barRef.current || !window.Chart) return;
     if (barInst.current) barInst.current.destroy();
     var isCount = tcMode === "count";
-    // counts mode: drop "not applicable" (it isn't an interview count) and fit the axis to the
-    // largest applicable bar — removes the empty gap to the axis. % mode keeps all 6 (stacks to 100).
-    var barStates = isCount ? BAR_ORDER5 : BAR_ORDER;
+    // counts mode: drop "not applicable" (it isn't an interview count) and fit the axis to the largest
+    // applicable bar. % mode: by default keeps all 6 (stacks to 100% of total incl. N/A); when the user
+    // excludes N/A, drop it and rescale the 5 real states to 100% of applicable (matches the scoreboard).
+    var excl = tcMode === "pct" && naMode === "exclude";
+    var barStates = (isCount || excl) ? BAR_ORDER5 : BAR_ORDER;
     var tsRows = topicRowsFor(DATA.topicStatus, topicGroupMode);
     var maxApp = Math.max.apply(null, tsRows.map(function (t) { return t.applicable || 0; })) || 1;
     barInst.current = new window.Chart(barRef.current.getContext("2d"), {
@@ -186,15 +190,15 @@ function WorkflowUI(props) {
       data: { labels: tsRows.map(function (t) { return t.label || (t.code + " · " + (TOPIC_NAMES[t.code] || t.code)); }),
         datasets: barStates.map(function (st) {
           return { label: STATE_LABEL[st],
-            data: tsRows.map(function (t) { return isCount ? (t[st] || 0) : (t.total ? Math.round(1000 * t[st] / t.total) / 10 : 0); }),
+            data: tsRows.map(function (t) { if (isCount) return t[st] || 0; var denom = excl ? (t.applicable || 0) : (t.total || 0); return denom ? Math.round(1000 * t[st] / denom) / 10 : 0; }),
             backgroundColor: STATE_COLOR[st] }; }) },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
-        plugins: { title: { display: true, text: (topicGroupMode === "theme" ? "FLW status distribution by THEME (related topics pooled)" : "FLW status distribution by topic") + (isCount ? " — # of applicable FLWs" : " — % of claimed FLWs (stacks to 100%)") }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any status in the legend below to show / hide it in the chart", color: "#4f46e5", font: { weight: "bold", size: 11 } } },
+        plugins: { title: { display: true, text: (topicGroupMode === "theme" ? "FLW status distribution by THEME (related topics pooled)" : "FLW status distribution by topic") + (isCount ? " — # of applicable FLWs" : (excl ? " — % of applicable FLWs (stacks to 100%)" : " — % of claimed FLWs (stacks to 100%)")) }, legend: { position: "bottom", title: { display: true, text: "⇄ Toggle: click any status in the legend below to show / hide it in the chart", color: "#4f46e5", font: { weight: "bold", size: 11 } } },
           tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ": " + ctx.parsed.x + (isCount ? "" : "%"); } } } },
         scales: { x: { stacked: true, max: isCount ? maxApp : 100, title: { display: true, text: isCount ? "# of FLWs the topic applies to" : "% of claimed FLWs" } }, y: { stacked: true, ticks: { autoSkip: false, font: { size: 10 } } } } }
     });
     return function () { if (barInst.current) { barInst.current.destroy(); barInst.current = null; } };
-  }, [activeTab, tableSub, topicChart, tcMode, topicGroupMode]);
+  }, [activeTab, tableSub, topicChart, tcMode, topicGroupMode, naMode]);
 
   function subBtn(cur, val, set, label) {
     var on = cur === val;
@@ -636,7 +640,18 @@ function WorkflowUI(props) {
                   <span className="text-xs text-gray-400">Show:</span>
                   {subBtn(tcMode, "pct", setTcMode, "%")}
                   {subBtn(tcMode, "count", setTcMode, "Raw counts")}
+                  {topicChart === "stacked" && tcMode === "pct" && (
+                    <React.Fragment>
+                      <span className="mx-1 text-gray-300">|</span>
+                      <span className="text-xs text-gray-400">Not applicable:</span>
+                      {subBtn(naMode, "include", setNaMode, "Include")}
+                      {subBtn(naMode, "exclude", setNaMode, "Exclude")}
+                    </React.Fragment>
+                  )}
                 </div>
+                {topicChart === "stacked" && tcMode === "pct" && naMode === "exclude" && (
+                  <p className="text-xs text-gray-400 px-1">Excludes “not applicable”: the 5 real statuses rescale to <span className="font-medium text-gray-500">100% of the interviews that apply</span> (same base as the Completion scoreboard).</p>
+                )}
                 {topicGroupMode === "theme" && (
                   <p className="text-xs text-gray-400 px-1">Related topics pooled into themes (interview-level sum): <span className="font-medium text-gray-500">Malaria</span> = B,1,2,10,10S,10L,14 · <span className="font-medium text-gray-500">Water &amp; Diarrhea</span> = D,11,11S,11L · <span className="font-medium text-gray-500">Community &amp; FLW Profile</span> = E,12 · <span className="font-medium text-gray-500">Antibiotics &amp; ACT Use</span> = 8,8S,8L · <span className="font-medium text-gray-500">Medicine Quality</span> = 9,13,13L. Topics not in a theme stay individual.</p>
                 )}
