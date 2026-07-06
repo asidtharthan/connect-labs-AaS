@@ -56,8 +56,8 @@ _FALLBACK_DESIGN = {
     "ABT2-A": {"topics": ["1", "2"], "cadence": 14},
     "ABT2-B": {"topics": ["1", "2", "5", "6", "7", "8", "9", "3"], "cadence": 3},
     "PANEL": {"topics": ["7", "1", "2", "3", "4", "5", "6", "8", "9", "10", "11"], "cadence": 4},
-    "ABT3-A": {"topics": ["8", "9", "10", "11"], "cadence": 7},
-    "ABT3-B": {"topics": ["8", "9", "10", "11"], "cadence": 7},
+    "ABT3-A": {"topics": ["8S", "13", "10S", "11S"], "cadence": 3},
+    "ABT3-B": {"topics": ["8L", "13L", "10L", "11L"], "cadence": 3},
     "2WT": {"topics": ["14"], "cadence": 14},  # 2-Week Test: single interview on topic 14; live design from CCHQ lookup
 }
 # Authoritative map locked to master_v7_2026-06-10 (incl. the 'Prevalance' typo in C).
@@ -81,6 +81,14 @@ TOPIC_NAMES = {
     "12": "Community & FLW Profile 2",
     "13": "Medicine Quality & Counterfeiting 2",
     "14": "Malaria 5",
+    # ABT3 (Interview Length A/B test) short/long variants
+    "8S": "Antibiotics and ACT Use 2",
+    "8L": "Antibiotics and ACT Use 3",
+    "10S": "Malaria 3",
+    "10L": "Malaria 4",
+    "11S": "Water & Diarrhea 3",
+    "11L": "Water & Diarrhea 4",
+    "13L": "Medicine Quality & Counterfeiting 3",
     "F": "Care Seeking Behavior",
     "G": "Trust, Beliefs & Health Perceptions",
 }
@@ -89,6 +97,7 @@ TOPIC_QUESTIONS = {
     "A": 7, "B": 9, "C": 8, "D": 6, "E": 8,
     "1": 9, "2": 10, "3": 19, "4": 16, "5": 5, "6": 13, "7": 7,
     "8": 10, "9": 5, "10": 8, "11": 10, "12": 13, "13": 7, "14": 20,
+    "8S": 7, "8L": 20, "10S": 7, "10L": 20, "11S": 7, "11L": 20, "13L": 20,
 }
 COHORT_TYPE_MAP = {
     "TRS": "Standard",
