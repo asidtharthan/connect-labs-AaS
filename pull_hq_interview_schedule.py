@@ -36,6 +36,8 @@ _DEFAULT_DOMAINS = [
     "connect-interview-eha-2",
     "ccc-interview-panel-cowac",
     "ccc-interview-panel-eha",
+    "connect-int-ng-cowac-2wt",
+    "connect-int-ng-eha-2wt",
 ]
 
 _creds_file = ROOT / ".hq_creds.json"
@@ -99,6 +101,8 @@ def build_chain(cohort_rows):
         seen.add(prev)
         d = by_prev[prev]
         topic = (d.get("next_interview") or "").strip()
+        if topic in ("--", ""):  # terminal sentinel (e.g. 2WT chain: 14 -> "--"); not a real interview
+            break
         seq.append({"n": len(seq) + 1, "topic": topic, "offset_days": offset})
         try:
             f = int(float(d.get("frequency_days")))

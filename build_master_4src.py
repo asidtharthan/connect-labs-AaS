@@ -38,6 +38,9 @@ ALL_DOMAINS = [
     # Panel (Long-Term Engagement) — separate domains, cohorts 1PC1 (COWACDI) / 1PE1 (EHA).
     "ccc-interview-panel-cowac",
     "ccc-interview-panel-eha",
+    # 2WT (2-Week Test) — separate domains, cohorts 2WTC1 (COWACDI) / 2WTE1 (EHA).
+    "connect-int-ng-cowac-2wt",
+    "connect-int-ng-eha-2wt",
 ]
 
 # FALLBACK only — the live SUBGROUP_DESIGN is derived from the CommCare HQ `interview_schedule`
@@ -55,6 +58,7 @@ _FALLBACK_DESIGN = {
     "PANEL": {"topics": ["7", "1", "2", "3", "4", "5", "6", "8", "9", "10", "11"], "cadence": 4},
     "ABT3-A": {"topics": ["8", "9", "10", "11"], "cadence": 7},
     "ABT3-B": {"topics": ["8", "9", "10", "11"], "cadence": 7},
+    "2WT": {"topics": ["14"], "cadence": 14},  # 2-Week Test: single interview on topic 14; live design from CCHQ lookup
 }
 # Authoritative map locked to master_v7_2026-06-10 (incl. the 'Prevalance' typo in C).
 TOPIC_NAMES = {
@@ -76,6 +80,7 @@ TOPIC_NAMES = {
     "11": "Water & Diarrhea 2",
     "12": "Community & FLW Profile 2",
     "13": "Medicine Quality & Counterfeiting 2",
+    "14": "Malaria 5",
     "F": "Care Seeking Behavior",
     "G": "Trust, Beliefs & Health Perceptions",
 }
@@ -83,7 +88,7 @@ TOPIC_NAMES = {
 TOPIC_QUESTIONS = {
     "A": 7, "B": 9, "C": 8, "D": 6, "E": 8,
     "1": 9, "2": 10, "3": 19, "4": 16, "5": 5, "6": 13, "7": 7,
-    "8": 10, "9": 5, "10": 8, "11": 10, "12": 13, "13": 7,
+    "8": 10, "9": 5, "10": 8, "11": 10, "12": 13, "13": 7, "14": 20,
 }
 COHORT_TYPE_MAP = {
     "TRS": "Standard",
@@ -95,6 +100,7 @@ COHORT_TYPE_MAP = {
     "PANEL": "Panel",
     "ABT3-A": "ABT3 A",
     "ABT3-B": "ABT3 B",
+    "2WT": "2WT (2-Week Test)",
 }
 
 # Cohorts seen in the data whose id doesn't map to any known subgroup design. Collected (not dropped
@@ -116,6 +122,8 @@ def cohort_to_sg(c):
         return "ABT2-A" if "A" in c[5:] else "ABT2-B"
     if "ABT3" in c:
         return "ABT3-A" if "A" in c[5:] else "ABT3-B"
+    if re.search(r"2WT[CE]\d", c):  # 2-Week Test cohorts: 2WTC1 (COWACDI), 2WTE1 (EHA)
+        return "2WT"
     if re.search(r"P[CE]\d", c):  # Panel cohorts: 1PC1 (COWACDI), 1PE1 (EHA) — tight pattern, not a loose "PE" substring
         return "PANEL"
 

@@ -61,8 +61,8 @@ function WorkflowUI(props) {
     "2": "Seasonal Malaria Chemoprevention 2", "3": "Bed Net Usage", "4": "Health Worker Experience",
     "5": "Family Planning", "6": "Vitamin A Supplementation", "7": "Vaccines",
     "8": "Antibiotics and ACT Use", "9": "Medicine Quality & Counterfeiting",
-    "10": "Malaria 2", "11": "Water & Diarrhea 2", "12": "Community & FLW Profile 2", "13": "Medicine Quality & Counterfeiting 2" };
-  var SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "PANEL", "ABT3-A", "ABT3-B"];
+    "10": "Malaria 2", "11": "Water & Diarrhea 2", "12": "Community & FLW Profile 2", "13": "Medicine Quality & Counterfeiting 2", "14": "Malaria 5" };
+  var SG_ORDER = ["TRS", "TRE", "ABT1-A", "ABT1-B", "ABT2-A", "ABT2-B", "PANEL", "ABT3-A", "ABT3-B", "2WT"];
   // 6 states in the spec order (Notes doc): not-applicable -> completed
   var STATES = ["not-applicable", "not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
   var STATES5 = ["not-available-yet", "available-not-started", "available-missed-overdue", "started-not-completed", "completed"];
@@ -92,10 +92,10 @@ function WorkflowUI(props) {
       </details>
     );
   }
-  var SG_COLOR = { "TRS": "#6366f1", "TRE": "#0ea5e9", "ABT1-A": "#f59e0b", "ABT1-B": "#ef4444", "ABT2-A": "#10b981", "ABT2-B": "#8b5cf6", "PANEL": "#14b8a6", "ABT3-A": "#ec4899", "ABT3-B": "#f43f5e" };
+  var SG_COLOR = { "TRS": "#6366f1", "TRE": "#0ea5e9", "ABT1-A": "#f59e0b", "ABT1-B": "#ef4444", "ABT2-A": "#10b981", "ABT2-B": "#8b5cf6", "PANEL": "#14b8a6", "ABT3-A": "#ec4899", "ABT3-B": "#f43f5e", "2WT": "#9333ea" };
   // FLW × Topic matrix cell glyphs, indexed by STATES order (0 not-applicable … 5 completed)
   var CELL_GLYPH = ["", "·", "○", "!", "◐", "✓"];
-  var MATRIX_TOPIC_ORDER = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
+  var MATRIX_TOPIC_ORDER = ["A", "B", "C", "D", "E", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"];
 
   var th = "px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider";
   var td = "px-3 py-2 whitespace-nowrap text-sm text-gray-800";

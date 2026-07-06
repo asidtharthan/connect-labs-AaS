@@ -62,6 +62,8 @@ def _cohort_to_sg(c):
         return "ABT2-A" if "A" in c[5:] else "ABT2-B"
     if "ABT3" in c:
         return "ABT3-A" if "A" in c[5:] else "ABT3-B"
+    if re.search(r"2WT[CE]\d", c):
+        return "2WT"
     if re.search(r"P[CE]\d", c):
         return "PANEL"
     return None
