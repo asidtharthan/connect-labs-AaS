@@ -72,6 +72,7 @@ def cohort_to_sg(c):
     if "ABT1" in c: return "ABT1-A" if "A" in c[5:] else "ABT1-B"
     if "ABT2" in c: return "ABT2-A" if "A" in c[5:] else "ABT2-B"
     if "ABT3" in c: return "ABT3-A" if "A" in c[5:] else "ABT3-B"
+    if re.search(r"2WT[CE]\d", c): return "2WT"
     if re.search(r"P[CE]\d", c): return "PANEL"
     return None
 
@@ -261,7 +262,7 @@ for sg in cf:
 
 # D-tables 1/2/3
 ROLL = {"TRS": "TRS", "TRE": "TRE", "ABT1-A": "ABT1", "ABT1-B": "ABT1", "ABT2-A": "ABT2", "ABT2-B": "ABT2",
-        "PANEL": "PANEL", "ABT3-A": "ABT3", "ABT3-B": "ABT3"}
+        "PANEL": "PANEL", "ABT3-A": "ABT3", "ABT3-B": "ABT3", "2WT": "2WT"}
 
 
 def agg(keyfn):

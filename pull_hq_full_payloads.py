@@ -39,6 +39,9 @@ _DEFAULT_DOMAINS = [
     # Panel (Long-Term Engagement) — separate domains, cohorts 1PC1 (COWACDI) / 1PE1 (EHA).
     "ccc-interview-panel-cowac",
     "ccc-interview-panel-eha",
+    # 2WT (2-Week Test) — separate domains, cohorts 2WTC1 (COWACDI) / 2WTE1 (EHA).
+    "connect-int-ng-cowac-2wt",
+    "connect-int-ng-eha-2wt",
 ]
 # Creds from env (HQ_API_KEY/HQ_USERNAME[/HQ_DOMAINS]) for CI/server, else .hq_creds.json locally.
 _creds_file = ROOT / ".hq_creds.json"
