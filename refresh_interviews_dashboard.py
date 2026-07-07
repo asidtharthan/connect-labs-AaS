@@ -272,7 +272,7 @@ def main():
     run("5. build dashboard_data", [PY, "build_dashboard_data.py"])
 
     # 6: audit — hard gate
-    run("6a. end-to-end audit (26/26)", [PY, "audit_e2e.py"])
+    run("6a. end-to-end audit (27/27)", [PY, "audit_e2e.py"])
     run("6b. dashboard_data audit (18/18)", [PY, "build_dashboard_data_audit.py"])
 
     # 7: inject
@@ -293,6 +293,13 @@ def main():
         print("\n=== 8. push: skipped (no --push) ===", flush=True)
 
     write_github_summary(pushed_version)
+    # Fail loudly if a publish was requested but didn't happen (e.g. expired MCP token) — otherwise the
+    # job exits green while the dashboard silently stays on the old render. (Root-caused 2026-07-07: an
+    # expired MCP_BEARER made push() print "FAILED" and return False, yet the run still reported success.)
+    if args.push and not pushed_version:
+        print("\nABORT: --push requested but publish FAILED (see step 8) — failing the job so it is not "
+              "silently left un-published. Most likely the MCP_BEARER token expired; re-mint it.", flush=True)
+        sys.exit(1)
     print("\nDONE.", flush=True)
 
 
