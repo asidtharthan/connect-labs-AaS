@@ -311,9 +311,10 @@ function WorkflowUI(props) {
   // cohorts, so this lists all (comma-joined); "" if the FLW isn't claimed.
   function cohortsFor(cid) { var fi = flwInfo[cid]; return fi ? Object.keys(fi.cohorts).sort().join(", ") : ""; }
   // Exact cohort for ONE session. Best source is the OCS session's own state (r.cohort_id — the cohort the
-  // bot recorded on that session). Older sessions predate that field, so fall back to the live triggers
-  // pipeline (connect_id|interview -> cohort_id), then the FLW's cohort whose design runs this topic
-  // (disambiguates a multi-cohort FLW by the session's interview), then all the FLW's cohorts.
+  // bot recorded on that session); every session from ~early May onward has it. Sessions before that predate
+  // the field, so the exact cohort is simply not in the source data — for those we ONLY infer a cohort when
+  // it is UNAMBIGUOUS (a single-cohort FLW, or exactly one of the FLW's cohorts runs the session's topic, or
+  // a single trigger match). If it can't be pinned to exactly one, show "—" rather than a misleading list.
   var trigCohort = {};
   liveRows("triggers").forEach(function (r) {
     var cid = r.connect_id || r.username || "";
@@ -324,14 +325,16 @@ function WorkflowUI(props) {
   function sessionCohort(r) {
     if (r.cohort_id) return r.cohort_id;   // exact — from the OCS session state
     var cid = r.connect_id, iv = r.interview;
-    if (iv) { var t = trigCohort[cid + "|" + iv]; if (t) return Object.keys(t).sort().join(", "); }
+    if (iv) { var t = trigCohort[cid + "|" + iv]; var tk = t ? Object.keys(t) : []; if (tk.length === 1) return tk[0]; }
     var fi = flwInfo[cid];
     if (!fi) return "";
+    var ck = Object.keys(fi.cohorts);
+    if (ck.length === 1) return ck[0];   // single-cohort FLW → unambiguous for any of their sessions
     if (iv) {
       var bt = Object.keys(fi.cg).filter(function (c) { return (SUBGROUP_DESIGN[fi.cg[c]] || []).indexOf(iv) >= 0; });
-      if (bt.length) return bt.sort().join(", ");
+      if (bt.length === 1) return bt[0];   // exactly one of the FLW's cohorts runs this topic
     }
-    return cohortsFor(cid);
+    return "";   // multi-cohort FLW on a pre-cohort-tag session → not recoverable → "—"
   }
   var fSubgroups = SG_ORDER.filter(function (sg) { return FM.some(function (r) { return r.g === sg; }); });
   var fCohorts = Object.keys(FM.reduce(function (a, r) { a[r.c] = 1; return a; }, {})).sort();
