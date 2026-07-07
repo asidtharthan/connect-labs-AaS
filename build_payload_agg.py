@@ -182,6 +182,31 @@ for sg in SG_PRESENT:
     line_di[sg] = series_di
     line_status[sg] = statuses
 
+# ---- per-subgroup "still rolling out" flag (drives the dotted funnel line) ----
+# The dotted/settled line should reflect whether a subgroup is still working through its interview
+# schedule, not the release-window guess (training_date = earliest invited_date, which for re-draw
+# cohorts like ABT3 precedes the real interview start by ~a week, so windows read "settled" while
+# interviews are still firing). "Recent trigger" is NOT a usable signal — every subgroup accrues a
+# long tail of late/returning triggers, so that would mark everything active. Instead: a subgroup is
+# "active" (-> dotted) if ANY of its cohorts is still within its schedule window, measured from that
+# cohort's FIRST real interview trigger (its true start): today - first_trigger <= num_interviews x
+# cadence. That ignores the tail (uses the start), so ABT3 (started ~1 week ago) is dotted while TRS
+# (started in April) is solid. Additive: does not touch line_status, funnel numbers, or the nulling.
+_cohort_first_trig = {}
+for r in bm.rows:
+    _td = bm.parse_dt(r.get("trigger_received_on"))
+    _c = r["cohort_id"]
+    if _td and (_c not in _cohort_first_trig or _td < _cohort_first_trig[_c]):
+        _cohort_first_trig[_c] = _td
+line_active = {sg: False for sg in SG_PRESENT}
+for _c, _ft in _cohort_first_trig.items():
+    _sg = bm.cohort_to_sg(_c)
+    if _sg not in line_active:
+        continue
+    _span = len(bm.SUBGROUP_DESIGN[_sg]["topics"]) * bm.SUBGROUP_DESIGN[_sg]["cadence"]
+    if (TODAY - _ft.date()).days <= _span:
+        line_active[_sg] = True
+
 
 # ---- Tables 1-3 ----
 def agg(keyfn, keys):
@@ -411,6 +436,7 @@ payload = {
     "line_pct_started": line,
     "line_pct_started_di": line_di,   # de-impacted %started series (item 8)
     "line_status": line_status,       # per-point release status (not-available/in-progress/settled)
+    "line_active": line_active,       # per-subgroup: still actively triggering -> dotted funnel line
     "deimpact": deimpact,             # {sg: {last_n, count}} penult/last artifact summary
     "table1": t1,
     "table2": t2,

@@ -62,11 +62,13 @@ for sg in SG_ORDER:
 line_series = []
 _line_di = payload.get("line_pct_started_di", {})
 _line_st = payload.get("line_status", {})
+_line_active = payload.get("line_active", {})
 for sg in SG_ORDER:
     line_series.append({"sg": sg, "base": len(elig_sg.get(sg, set())),
                         "pts": payload["line_pct_started"].get(sg, []),
                         "pts_di": _line_di.get(sg, []),       # de-impacted %started (item 8)
-                        "status": _line_st.get(sg, [])})      # per-point release status (items A1/A2)
+                        "status": _line_st.get(sg, []),       # per-point release status (items A1/A2)
+                        "active": _line_active.get(sg, False)})  # still triggering -> dotted line
 
 # ---- topicStatus reshaped: all 6 states (incl not-applicable) + total (for %-stack to 100) ----
 ORDER6 = [

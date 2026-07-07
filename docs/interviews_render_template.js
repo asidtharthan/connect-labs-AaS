@@ -160,8 +160,10 @@ function WorkflowUI(props) {
         // not-available interviews (not yet offered) → null so the line ends instead of a false 0%
         var pts = raw.map(function (v, i) { return st[i] === "not-available" ? null : v; });
         var col = SG_COLOR[s.sg] || "#9ca3af";
-        // a subgroup still accumulating any interview (e.g. PANEL) → dot its ENTIRE line; fully settled → solid
-        var inProgress = st.some(function (x) { return x === "in-progress"; });
+        // Dot the whole line while the subgroup is still being triggered (bot actively handing out
+        // interviews); solid once triggering has stopped. Uses the build's activity flag (real trigger
+        // within 2x cadence); falls back to the release-window status for older builds without the flag.
+        var inProgress = (s.active != null) ? !!s.active : st.some(function (x) { return x === "in-progress"; });
         return { label: s.sg + " (n=" + s.base + ")", data: pts, borderColor: col,
           backgroundColor: col, fill: false, tension: 0.2, spanGaps: false, borderWidth: 3,
           hidden: !!hidSg[s.sg], borderDash: inProgress ? [8, 5] : undefined }; }) },
@@ -842,7 +844,7 @@ function WorkflowUI(props) {
               <span className="text-xs font-semibold text-indigo-600 mr-1">⇄ Toggle: click a subgroup to show / hide its line</span>
               {DATA.lineSeries.map(function (s) {
                 var col = SG_COLOR[s.sg] || "#9ca3af";
-                var dashed = (s.status || []).some(function (x) { return x === "in-progress"; });
+                var dashed = (s.active != null) ? !!s.active : (s.status || []).some(function (x) { return x === "in-progress"; });
                 var off = !!hidSg[s.sg];
                 return (
                   <button key={s.sg} type="button"
