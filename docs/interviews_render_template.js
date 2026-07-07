@@ -290,11 +290,12 @@ function WorkflowUI(props) {
           connect_id: r.connect_id || r.username || "", interview: (iv == null || iv === "") ? "" : String(iv),
           started: !!(iv != null && iv !== ""), completed: stt === "interview_complete",
           created_at: (r.created_at || "").slice(0, 10), session_id: r.id || r.matched_session_id || "",
+          cohort_id: r.cohort_id || "",   // exact cohort the bot recorded in the OCS session state
         };
       })
     : DATA.granular.map(function (r) {
         return { connect_id: r.connect_id, interview: r.topic_code, started: r.is_started,
-          completed: r.is_completed, created_at: "", session_id: r.session_id };
+          completed: r.is_completed, created_at: "", session_id: r.session_id, cohort_id: r.cohort_id || "" };
       });
   var gq = gSearch.trim().toLowerCase();
   // ---- per-(FLW × cohort) × topic matrix + a connect_id lookup for filtering both tables ----
@@ -307,10 +308,10 @@ function WorkflowUI(props) {
   // The FLW's cohort id(s). A live OCS session carries no cohort and an FLW can be claimed in several
   // cohorts, so this lists all (comma-joined); "" if the FLW isn't claimed.
   function cohortsFor(cid) { var fi = flwInfo[cid]; return fi ? Object.keys(fi.cohorts).sort().join(", ") : ""; }
-  // Exact cohort for ONE session. A session fires from a trigger that carries cohort_id, so map the live
-  // triggers pipeline (connect_id|interview -> cohort_id). Fallbacks when that isn't available: the FLW's
-  // cohort whose design runs this topic (disambiguates a multi-cohort FLW by the session's interview),
-  // else all the FLW's cohorts.
+  // Exact cohort for ONE session. Best source is the OCS session's own state (r.cohort_id — the cohort the
+  // bot recorded on that session). Older sessions predate that field, so fall back to the live triggers
+  // pipeline (connect_id|interview -> cohort_id), then the FLW's cohort whose design runs this topic
+  // (disambiguates a multi-cohort FLW by the session's interview), then all the FLW's cohorts.
   var trigCohort = {};
   liveRows("triggers").forEach(function (r) {
     var cid = r.connect_id || r.username || "";
@@ -318,7 +319,9 @@ function WorkflowUI(props) {
     var ch = r.cohort_id || "";
     if (cid && iv && ch) { var k = cid + "|" + iv; (trigCohort[k] || (trigCohort[k] = {}))[ch] = 1; }
   });
-  function sessionCohort(cid, iv) {
+  function sessionCohort(r) {
+    if (r.cohort_id) return r.cohort_id;   // exact — from the OCS session state
+    var cid = r.connect_id, iv = r.interview;
     if (iv) { var t = trigCohort[cid + "|" + iv]; if (t) return Object.keys(t).sort().join(", "); }
     var fi = flwInfo[cid];
     if (!fi) return "";
@@ -338,7 +341,7 @@ function WorkflowUI(props) {
   // Sessions table: filter live OCS rows via the FLW lookup (cohort filter is by the FLW's cohort,
   // since a session isn't bound to one cohort) + status from the row itself.
   var sessFiltered = sessSource.filter(function (r) {
-    if (gq && (r.connect_id + " " + sessionCohort(r.connect_id, r.interview) + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
+    if (gq && (r.connect_id + " " + sessionCohort(r) + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
     var fi = flwInfo[r.connect_id];
     if (fSg && (!fi || fi.g !== fSg)) return false;
     if (fCo && (!fi || !fi.cohorts[fCo])) return false;
@@ -363,7 +366,7 @@ function WorkflowUI(props) {
   });
   // ---- sessions sort (click a column header) ----
   function sortVal(r, key) {
-    if (key === "cohort_id") return sessionCohort(r.connect_id, r.interview);
+    if (key === "cohort_id") return sessionCohort(r);
     if (key === "interview") { var n = Number(r.interview); return isNaN(n) ? r.interview || "" : n; }
     if (key === "status") return r.completed ? 2 : r.started ? 1 : 0;   // ordinal: completed > started > none
     if (key === "created") return r.created_at || "";
@@ -581,7 +584,7 @@ function WorkflowUI(props) {
                             return (
                               <tr key={idx} className="hover:bg-gray-50">
                                 <td className={td + " font-mono text-xs"}>{r.connect_id}</td>
-                                <td className={td + " font-mono text-xs text-gray-600"} title={sessionCohort(r.connect_id, r.interview)}>{sessionCohort(r.connect_id, r.interview) || "—"}</td>
+                                <td className={td + " font-mono text-xs text-gray-600"} title={sessionCohort(r)}>{sessionCohort(r) || "—"}</td>
                                 <td className={td}>{r.interview || "—"}</td>
                                 <td className={td + " " + cls}>{label}</td>
                                 <td className={td + " text-gray-500"}>{r.created_at || "—"}</td>
