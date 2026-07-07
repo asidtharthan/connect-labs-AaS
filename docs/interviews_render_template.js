@@ -304,6 +304,9 @@ function WorkflowUI(props) {
     var fi = flwInfo[r.f] || (flwInfo[r.f] = { g: r.g, cohorts: {}, u: 0 });
     fi.cohorts[r.c] = 1; if (r.u) fi.u = 1;
   });
+  // The FLW's cohort id(s) for the Sessions table. A live OCS session carries no cohort and an FLW
+  // can be claimed in several cohorts, so we list all (comma-joined); "" if the FLW isn't claimed.
+  function cohortsFor(cid) { var fi = flwInfo[cid]; return fi ? Object.keys(fi.cohorts).sort().join(", ") : ""; }
   var fSubgroups = SG_ORDER.filter(function (sg) { return FM.some(function (r) { return r.g === sg; }); });
   var fCohorts = Object.keys(FM.reduce(function (a, r) { a[r.c] = 1; return a; }, {})).sort();
   var MTOPICS = MATRIX_TOPIC_ORDER.filter(function (t) {
@@ -314,7 +317,7 @@ function WorkflowUI(props) {
   // Sessions table: filter live OCS rows via the FLW lookup (cohort filter is by the FLW's cohort,
   // since a session isn't bound to one cohort) + status from the row itself.
   var sessFiltered = sessSource.filter(function (r) {
-    if (gq && (r.connect_id + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
+    if (gq && (r.connect_id + " " + cohortsFor(r.connect_id) + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
     var fi = flwInfo[r.connect_id];
     if (fSg && (!fi || fi.g !== fSg)) return false;
     if (fCo && (!fi || !fi.cohorts[fCo])) return false;
@@ -339,6 +342,7 @@ function WorkflowUI(props) {
   });
   // ---- sessions sort (click a column header) ----
   function sortVal(r, key) {
+    if (key === "cohort_id") return cohortsFor(r.connect_id);
     if (key === "interview") { var n = Number(r.interview); return isNaN(n) ? r.interview || "" : n; }
     if (key === "status") return r.completed ? 2 : r.started ? 1 : 0;   // ordinal: completed > started > none
     if (key === "created") return r.created_at || "";
@@ -543,6 +547,7 @@ function WorkflowUI(props) {
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 sticky top-0"><tr>
                           {sortTh("connect_id", "connect_id")}
+                          {sortTh("cohort_id", "cohort_id")}
                           {sortTh("interview", "interview")}
                           {sortTh("status", "status")}
                           {sortTh("created", "created")}
@@ -555,6 +560,7 @@ function WorkflowUI(props) {
                             return (
                               <tr key={idx} className="hover:bg-gray-50">
                                 <td className={td + " font-mono text-xs"}>{r.connect_id}</td>
+                                <td className={td + " font-mono text-xs text-gray-600"} title={cohortsFor(r.connect_id)}>{cohortsFor(r.connect_id) || "—"}</td>
                                 <td className={td}>{r.interview || "—"}</td>
                                 <td className={td + " " + cls}>{label}</td>
                                 <td className={td + " text-gray-500"}>{r.created_at || "—"}</td>
