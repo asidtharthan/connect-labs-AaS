@@ -303,9 +303,11 @@ function WorkflowUI(props) {
   // ---- per-(FLW × cohort) × topic matrix + a connect_id lookup for filtering both tables ----
   var FM = DATA.flwMatrix || [];
   var flwInfo = {};   // connect_id -> { g: subgroup, cohorts: {cohort:1}, u: untrained }
+  var cohortSG = {};  // cohort id -> subgroup (global, for session-level subgroup filtering)
   FM.forEach(function (r) {
     var fi = flwInfo[r.f] || (flwInfo[r.f] = { g: r.g, cohorts: {}, cg: {}, u: 0 });
     fi.cohorts[r.c] = 1; fi.cg[r.c] = r.g; if (r.u) fi.u = 1;   // cg: cohort -> subgroup (topic disambiguation)
+    cohortSG[r.c] = r.g;
   });
   // The FLW's cohort id(s). A live OCS session carries no cohort and an FLW can be claimed in several
   // cohorts, so this lists all (comma-joined); "" if the FLW isn't claimed.
@@ -343,13 +345,17 @@ function WorkflowUI(props) {
   });
   var anyFilter = !!(fSg || fCo || fSt || fTr || fTopic || gq);
   function clearFilters() { setGSearch(""); setFSg(""); setFCo(""); setFSt(""); setFTr(""); setFTopic(""); setGPage(0); }
-  // Sessions table: filter live OCS rows via the FLW lookup (cohort filter is by the FLW's cohort,
-  // since a session isn't bound to one cohort) + status from the row itself.
+  // Sessions table: the cohort/subgroup filters match the SESSION'S OWN resolved cohort (sessionCohort),
+  // so the filter and the COHORT_ID column always agree — filtering "1PE1" shows only the sessions that
+  // are 1PE1, not every session of an FLW who happens to also be in 1PE1. Sessions whose exact cohort
+  // isn't recoverable ("—") therefore don't match a specific cohort/subgroup filter. Trained/untrained
+  // stays an FLW attribute; status/topic come from the row itself.
   var sessFiltered = sessSource.filter(function (r) {
-    if (gq && (r.connect_id + " " + sessionCohort(r) + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
+    var sc = sessionCohort(r);
+    if (gq && (r.connect_id + " " + sc + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
     var fi = flwInfo[r.connect_id];
-    if (fSg && (!fi || fi.g !== fSg)) return false;
-    if (fCo && (!fi || !fi.cohorts[fCo])) return false;
+    if (fSg && cohortSG[sc] !== fSg) return false;
+    if (fCo && sc !== fCo) return false;
     if (fTr && (!fi || (fTr === "untrained" ? !fi.u : fi.u))) return false;
     if (fTopic && String(r.interview) !== fTopic) return false;
     if (fSt) { var st = r.completed ? "completed" : (r.started ? "started-not-completed" : ""); if (st !== fSt) return false; }
