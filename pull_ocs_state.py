@@ -6,12 +6,44 @@ Output shape matches what build_master_4src.py reads: {sid, pid, interview, inte
 """
 import json
 import os
+import time
 from pathlib import Path
 
 import httpx
 
 BASE = os.environ.get("OCS_BASE_URL", "https://www.openchatstudio.com")
 EXP = os.environ.get("OCS_EXPERIMENT", "cc01d032-5931-4bdd-a4b2-6f05f4f72f88")
+
+# OCS occasionally returns a transient 5xx (e.g. 502 Bad Gateway) or drops the connection mid-pagination.
+# A single blip should NOT abort the whole daily refresh, so retry idempotent GETs with exponential backoff.
+RETRY_STATUS = {429, 500, 502, 503, 504}
+MAX_RETRIES = 6
+
+
+def _get_with_retry(client, url, params):
+    """GET a page, retrying transient 5xx / network errors with exponential backoff. Raises on 4xx or exhaustion."""
+    delay = 2.0
+    last_exc = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            r = client.get(url, params=params)
+            if r.status_code in RETRY_STATUS and attempt < MAX_RETRIES:
+                print(f"    OCS {r.status_code} on attempt {attempt}/{MAX_RETRIES}; retrying in {delay:.0f}s...", flush=True)
+                time.sleep(delay)
+                delay = min(delay * 2, 60.0)
+                continue
+            r.raise_for_status()
+            return r
+        except (httpx.TransportError, httpx.TimeoutException) as e:  # connection reset, read timeout, etc.
+            last_exc = e
+            if attempt >= MAX_RETRIES:
+                break
+            print(f"    OCS network error on attempt {attempt}/{MAX_RETRIES} ({type(e).__name__}); retrying in {delay:.0f}s...", flush=True)
+            time.sleep(delay)
+            delay = min(delay * 2, 60.0)
+    if last_exc:
+        raise last_exc
+    raise SystemExit(f"OCS still failing after {MAX_RETRIES} attempts: {url}")
 
 
 def _ocs_key():
@@ -36,8 +68,7 @@ def pull():
     page = 0
     while url:
         page += 1
-        r = c.get(url, params=params if page == 1 else None)
-        r.raise_for_status()
+        r = _get_with_retry(c, url, params if page == 1 else None)
         d = r.json()
         for s in d.get("results", []):
             st = s.get("state") if isinstance(s.get("state"), dict) else {}
