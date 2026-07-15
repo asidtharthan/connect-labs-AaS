@@ -34,11 +34,14 @@ function WorkflowUI(props) {
   var gPage = gpp[0], setGPage = gpp[1];   // granular page
   var gvw = React.useState("sessions");
   var gView = gvw[0], setGView = gvw[1];   // granular sub-view: sessions | matrix (FLW × Topic)
-  var gf1 = React.useState(""); var fSg = gf1[0], setFSg = gf1[1];   // filter: subgroup
-  var gf2 = React.useState(""); var fCo = gf2[0], setFCo = gf2[1];   // filter: cohort
-  var gf3 = React.useState(""); var fSt = gf3[0], setFSt = gf3[1];   // filter: status (state)
-  var gf4 = React.useState(""); var fTr = gf4[0], setFTr = gf4[1];   // filter: trained | untrained
-  var gf5 = React.useState(""); var fTopic = gf5[0], setFTopic = gf5[1];   // filter: topic (interview code)
+  // Granular-view filters are MULTI-select: each holds an array of selected values ([] = "All", no filter).
+  var gf1 = React.useState([]); var fSg = gf1[0], setFSg = gf1[1];   // filter: subgroup(s)
+  var gf2 = React.useState([]); var fCo = gf2[0], setFCo = gf2[1];   // filter: cohort(s)
+  var gf3 = React.useState([]); var fSt = gf3[0], setFSt = gf3[1];   // filter: status(es)
+  var gf4 = React.useState([]); var fTr = gf4[0], setFTr = gf4[1];   // filter: trained | untrained
+  var gf5 = React.useState([]); var fTopic = gf5[0], setFTopic = gf5[1];   // filter: topic(s) (interview code)
+  var odd = React.useState(null); var openDD = odd[0], setOpenDD = odd[1];   // which filter dropdown is open (one at a time)
+  var ddq = React.useState({}); var ddQuery = ddq[0], setDdQuery = ddq[1];   // per-dropdown in-list search text
   var gso = React.useState({ key: "", dir: "asc" }); var gSort = gso[0], setGSort = gso[1];   // sessions table sort
   var dimp = React.useState(false);
   var deImpact = dimp[0], setDeImpact = dimp[1];   // item 8: raw vs de-impacted (penult/last artifact)
@@ -218,6 +221,56 @@ function WorkflowUI(props) {
     return "rgba(" + r + "," + g + "," + b + "," + a + ")";
   }
 
+  // Reusable multi-select checkbox dropdown (mirrors the mbw_monitoring column picker). Called as a
+  // plain function returning JSX (like subBtn) so it holds no component state of its own — open state
+  // and per-dropdown search live in the parent (openDD / ddQuery), which keeps input focus stable.
+  // opts: array of strings OR {value,label}. selected: array of values ([] = All). One dropdown open at a time.
+  function filterDropdown(id, label, opts, selected, setSelected) {
+    var norm = opts.map(function (o) { return typeof o === "string" ? { value: o, label: o } : o; });
+    var open = openDD === id;
+    var q = (ddQuery[id] || "").toLowerCase();
+    var shown = q ? norm.filter(function (o) { return (o.label + " " + o.value).toLowerCase().indexOf(q) >= 0; }) : norm;
+    function toggle(v) { setSelected(selected.indexOf(v) >= 0 ? selected.filter(function (x) { return x !== v; }) : selected.concat([v])); setGPage(0); }
+    return (
+      <div key={id} className="inline-block" style={{ position: "relative" }}>
+        <button onClick={function () { setOpenDD(open ? null : id); }}
+          className={"inline-flex items-center gap-1.5 border rounded-md px-2 py-1.5 text-sm " + (selected.length ? "border-indigo-400 bg-indigo-50 text-indigo-700" : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50")}>
+          {label}
+          {selected.length
+            ? <span className="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded-full">{selected.length}</span>
+            : <span className="text-gray-400 text-xs">All</span>}
+          <span className="text-gray-400 text-xs">▾</span>
+        </button>
+        {open && <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={function () { setOpenDD(null); }}></div>}
+        {open && (
+          <div style={{ position: "absolute", left: 0, top: "100%", marginTop: 4, zIndex: 50, width: 250, background: "white", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}>
+            {norm.length > 8 && (
+              <div className="px-2 py-2 border-b border-gray-200">
+                <input type="text" value={ddQuery[id] || ""} placeholder={"Search " + label.toLowerCase() + "…"}
+                  onChange={function (e) { var v = e.target.value; setDdQuery(function (p) { var n = Object.assign({}, p); n[id] = v; return n; }); }}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
+              </div>
+            )}
+            <div style={{ maxHeight: 260, overflowY: "auto" }} className="py-1">
+              {shown.length ? shown.map(function (o) {
+                return (
+                  <label key={o.value} className="flex items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" checked={selected.indexOf(o.value) >= 0} onChange={function () { toggle(o.value); }} className="mr-2" style={{ accentColor: "#4f46e5" }} />
+                    {o.label}
+                  </label>
+                );
+              }) : <div className="px-3 py-2 text-xs text-gray-400">No matches</div>}
+            </div>
+            <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-between">
+              <span className="text-xs text-gray-400">{selected.length ? selected.length + " selected" : "All (no filter)"}</span>
+              {selected.length ? <button onClick={function () { setSelected([]); setGPage(0); }} className="text-xs text-indigo-600 hover:underline font-medium">Clear</button> : null}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function ivRow(key, label, iv, indent) {
     var di = deImpact && iv.started_di != null;
     var stVal = di ? iv.started_di : iv.started;
@@ -271,6 +324,39 @@ function WorkflowUI(props) {
     var blob = new Blob([csv], { type: "text/csv" });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = "full_retention_table.csv"; a.click();
+  }
+
+  // ---- Granular CSV export (same Blob idiom as downloadRetention; opens directly in Excel) ----
+  function csvCell(c) { var s = String(c == null ? "" : c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  function dlCsv(rows, name) {
+    var csv = rows.map(function (r) { return r.map(csvCell).join(","); }).join("\n");
+    var blob = new Blob([csv], { type: "text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  }
+  function sessCsvRows(list) {
+    var rows = [["connect_id", "cohort_id", "interview", "status", "created", "session_id"]];
+    list.forEach(function (r) {
+      rows.push([r.connect_id, sessionCohort(r) || "", r.interview || "", r.completed ? "Completed" : (r.started ? "Started" : "—"), r.created_at || "", r.session_id || ""]);
+    });
+    return rows;
+  }
+  function matCsvRows(list) {
+    var rows = [["connect_id", "cohort", "subgroup"].concat(MTOPICS)];
+    list.forEach(function (r) {
+      var topics = SUBGROUP_DESIGN[r.g] || [], cb = {};
+      topics.forEach(function (t, i) { cb[t] = r.s[i]; });
+      var row = [r.f, r.c, r.g];
+      MTOPICS.forEach(function (t) { row.push(t in cb ? STATE_LABEL[STATES[cb[t]]] : ""); });
+      rows.push(row);
+    });
+    return rows;
+  }
+  // filtered=true -> exactly what's on screen (all active filters + search); false -> the full dataset.
+  function exportGranular(filtered) {
+    var d = new Date().toISOString().slice(0, 10);
+    if (gView === "matrix") dlCsv(matCsvRows(filtered ? matFiltered : FM), "interviews_matrix_" + (filtered ? "filtered" : "all") + "_" + d + ".csv");
+    else dlCsv(sessCsvRows(filtered ? sessSorted : sessSource), "interviews_sessions_" + (filtered ? "filtered" : "all") + "_" + d + ".csv");
   }
 
   // ---- Granular: ALL live OCS sessions (from the pipeline prop, not embedded) + client-side search/paging ----
@@ -343,8 +429,8 @@ function WorkflowUI(props) {
   var MTOPICS = MATRIX_TOPIC_ORDER.filter(function (t) {
     return fSubgroups.some(function (sg) { return (SUBGROUP_DESIGN[sg] || []).indexOf(t) >= 0; });
   });
-  var anyFilter = !!(fSg || fCo || fSt || fTr || fTopic || gq);
-  function clearFilters() { setGSearch(""); setFSg(""); setFCo(""); setFSt(""); setFTr(""); setFTopic(""); setGPage(0); }
+  var anyFilter = !!(fSg.length || fCo.length || fSt.length || fTr.length || fTopic.length || gq);
+  function clearFilters() { setGSearch(""); setFSg([]); setFCo([]); setFSt([]); setFTr([]); setFTopic([]); setGPage(0); }
   // Sessions table: the cohort/subgroup filters match the SESSION'S OWN resolved cohort (sessionCohort),
   // so the filter and the COHORT_ID column always agree — filtering "1PE1" shows only the sessions that
   // are 1PE1, not every session of an FLW who happens to also be in 1PE1. Sessions whose exact cohort
@@ -354,25 +440,26 @@ function WorkflowUI(props) {
     var sc = sessionCohort(r);
     if (gq && (r.connect_id + " " + sc + " " + r.session_id + " " + r.interview + " " + (r.completed ? "completed" : r.started ? "started" : "")).toLowerCase().indexOf(gq) < 0) return false;
     var fi = flwInfo[r.connect_id];
-    if (fSg && cohortSG[sc] !== fSg) return false;
-    if (fCo && sc !== fCo) return false;
-    if (fTr && (!fi || (fTr === "untrained" ? !fi.u : fi.u))) return false;
-    if (fTopic && String(r.interview) !== fTopic) return false;
-    if (fSt) { var st = r.completed ? "completed" : (r.started ? "started-not-completed" : ""); if (st !== fSt) return false; }
+    if (fSg.length && fSg.indexOf(cohortSG[sc]) < 0) return false;
+    if (fCo.length && fCo.indexOf(sc) < 0) return false;
+    if (fTr.length && (!fi || fTr.indexOf(fi.u ? "untrained" : "trained") < 0)) return false;
+    if (fTopic.length && fTopic.indexOf(String(r.interview)) < 0) return false;
+    if (fSt.length) { var st = r.completed ? "completed" : (r.started ? "started-not-completed" : ""); if (fSt.indexOf(st) < 0) return false; }
     return true;
   });
   // FLW × Topic matrix rows: row-level filters; status filter = FLW has >=1 topic in that state.
-  var fStIdx = fSt ? STATES.indexOf(fSt) : -1;
+  var fStIdxs = fSt.map(function (s) { return STATES.indexOf(s); }).filter(function (i) { return i >= 0; });
   var matFiltered = FM.filter(function (r) {
     if (gq && (r.f + " " + r.c).toLowerCase().indexOf(gq) < 0) return false;
-    if (fSg && r.g !== fSg) return false;
-    if (fCo && r.c !== fCo) return false;
-    if (fTr && (fTr === "untrained" ? !r.u : r.u)) return false;
-    if (fTopic) {
-      var ti = (SUBGROUP_DESIGN[r.g] || []).indexOf(fTopic);
-      if (ti < 0) return false;                              // FLW's subgroup doesn't run this topic
-      if (fStIdx >= 0 && r.s[ti] !== fStIdx) return false;   // that topic must be in the chosen state
-    } else if (fStIdx >= 0 && r.s.indexOf(fStIdx) < 0) return false;
+    if (fSg.length && fSg.indexOf(r.g) < 0) return false;
+    if (fCo.length && fCo.indexOf(r.c) < 0) return false;
+    if (fTr.length && fTr.indexOf(r.u ? "untrained" : "trained") < 0) return false;
+    if (fTopic.length) {
+      var idxs = fTopic.map(function (t) { return (SUBGROUP_DESIGN[r.g] || []).indexOf(t); }).filter(function (i) { return i >= 0; });
+      if (!idxs.length) return false;                        // subgroup runs none of the picked topics
+      // any picked topic must be in any picked state (cell-level, mirrors the single-select "that topic in that state")
+      if (fStIdxs.length && !idxs.some(function (i) { return fStIdxs.indexOf(r.s[i]) >= 0; })) return false;
+    } else if (fStIdxs.length && !r.s.some(function (x) { return fStIdxs.indexOf(x) >= 0; })) return false;   // any topic in any picked state
     return true;
   });
   // ---- sessions sort (click a column header) ----
@@ -549,28 +636,17 @@ function WorkflowUI(props) {
                   <input type="text" value={gSearch} placeholder={gView === "matrix" ? "Search connect_id / cohort…" : "Search connect_id / session / interview / status…"}
                     onChange={function (e) { setGSearch(e.target.value); setGPage(0); }}
                     className="border border-gray-300 rounded-md px-3 py-1.5 text-sm" style={{ width: "18rem" }} />
-                  <select value={fSg} onChange={function (e) { setFSg(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
-                    <option value="">All subgroups</option>
-                    {fSubgroups.map(function (sg) { return <option key={sg} value={sg}>{sg}</option>; })}
-                  </select>
-                  <select value={fCo} onChange={function (e) { setFCo(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
-                    <option value="">All cohorts</option>
-                    {fCohorts.map(function (co) { return <option key={co} value={co}>{co}</option>; })}
-                  </select>
-                  <select value={fTopic} onChange={function (e) { setFTopic(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" title="Filter by interview topic">
-                    <option value="">All topics</option>
-                    {MTOPICS.map(function (t) { return <option key={t} value={t}>{t} · {TOPIC_NAMES[t] || t}</option>; })}
-                  </select>
-                  <select value={fSt} onChange={function (e) { setFSt(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
-                    <option value="">All statuses</option>
-                    {STATES5.map(function (s) { return <option key={s} value={s}>{STATE_LABEL[s]}</option>; })}
-                  </select>
-                  <select value={fTr} onChange={function (e) { setFTr(e.target.value); setGPage(0); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
-                    <option value="">All FLWs</option>
-                    <option value="trained">Trained</option>
-                    <option value="untrained">Untrained</option>
-                  </select>
+                  {filterDropdown("sg", "Subgroup", fSubgroups, fSg, setFSg)}
+                  {filterDropdown("co", "Cohort", fCohorts, fCo, setFCo)}
+                  {filterDropdown("topic", "Topic", MTOPICS.map(function (t) { return { value: t, label: t + " · " + (TOPIC_NAMES[t] || t) }; }), fTopic, setFTopic)}
+                  {filterDropdown("st", "Status", STATES5.map(function (s) { return { value: s, label: STATE_LABEL[s] }; }), fSt, setFSt)}
+                  {filterDropdown("tr", "FLW", [{ value: "trained", label: "Trained" }, { value: "untrained", label: "Untrained" }], fTr, setFTr)}
                   {anyFilter ? <button onClick={clearFilters} className="px-2 py-1.5 text-xs text-indigo-600 hover:underline">Clear</button> : null}
+                  <span className="mx-1 text-gray-300">|</span>
+                  <button onClick={function () { exportGranular(true); }} title="Download exactly the rows shown (all active filters + search)"
+                    className="px-2 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-100">⬇ Export (filtered)</button>
+                  <button onClick={function () { exportGranular(false); }} title="Download the full dataset for this view, ignoring filters"
+                    className="px-2 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-100">⬇ Export all</button>
                 </div>
 
                 {gView === "sessions" && (
