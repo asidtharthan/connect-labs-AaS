@@ -221,6 +221,9 @@ function WorkflowUI(props) {
     return "rgba(" + r + "," + g + "," + b + "," + a + ")";
   }
 
+  // Full OCS session link (same URL the "view ↗" links use) — for the table and CSV export.
+  function sessionUrl(sid) { return sid ? "https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + sid + "/view/" : ""; }
+
   // Reusable multi-select checkbox dropdown (mirrors the mbw_monitoring column picker). Called as a
   // plain function returning JSX (like subBtn) so it holds no component state of its own — open state
   // and per-dropdown search live in the parent (openDD / ddQuery), which keeps input focus stable.
@@ -335,9 +338,9 @@ function WorkflowUI(props) {
     a.href = URL.createObjectURL(blob); a.download = name; a.click();
   }
   function sessCsvRows(list) {
-    var rows = [["connect_id", "cohort_id", "interview", "status", "created", "session_id"]];
+    var rows = [["connect_id", "cohort_id", "interview", "status", "created", "session_link"]];
     list.forEach(function (r) {
-      rows.push([r.connect_id, sessionCohort(r) || "", r.interview || "", r.completed ? "Completed" : (r.started ? "Started" : "—"), r.created_at || "", r.session_id || ""]);
+      rows.push([r.connect_id, sessionCohort(r) || "", r.interview || "", r.completed ? "Completed" : (r.started ? "Started" : "—"), r.created_at || "", sessionUrl(r.session_id)]);
     });
     return rows;
   }
@@ -675,7 +678,7 @@ function WorkflowUI(props) {
                                 <td className={td}>{r.interview || "—"}</td>
                                 <td className={td + " " + cls}>{label}</td>
                                 <td className={td + " text-gray-500"}>{r.created_at || "—"}</td>
-                                <td className={td + " font-mono text-xs"}>{r.session_id ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + r.session_id + "/view/"} target="_blank" rel="noopener noreferrer" title={r.session_id} className="text-indigo-600 hover:underline">view ↗</a> : ""}</td>
+                                <td className={td + " font-mono text-xs"}>{r.session_id ? <a href={sessionUrl(r.session_id)} target="_blank" rel="noopener noreferrer" title={r.session_id} className="text-indigo-600 hover:underline">view ↗</a> : ""}</td>
                               </tr>
                             );
                           })}
@@ -717,7 +720,7 @@ function WorkflowUI(props) {
                                   var code = cb[t];
                                   var _sid = sessByKey[r.f + "|" + t];
                                   var _cell = _sid
-                                    ? <a href={"https://www.openchatstudio.com/a/Vaccine_Coach/chatbots/e/cc01d032-5931-4bdd-a4b2-6f05f4f72f88/s/" + _sid + "/view/"} target="_blank" rel="noopener noreferrer" style={{ color: "#fff", fontWeight: 700, textDecoration: "none" }}>{CELL_GLYPH[code]}<span style={{ fontSize: "10px", verticalAlign: "super", color: "#38bdf8", fontWeight: 700 }}>↗</span></a>
+                                    ? <a href={sessionUrl(_sid)} target="_blank" rel="noopener noreferrer" style={{ color: "#fff", fontWeight: 700, textDecoration: "none" }}>{CELL_GLYPH[code]}<span style={{ fontSize: "10px", verticalAlign: "super", color: "#38bdf8", fontWeight: 700 }}>↗</span></a>
                                     : CELL_GLYPH[code];
                                   return <td key={t} className={"px-2 py-1 text-center text-xs" + (_sid ? " cursor-pointer" : "")} title={(TOPIC_NAMES[t] || t) + " — " + STATE_LABEL[STATES[code]] + (_sid ? " · click ↗ to open the OCS session" : "")}
                                     style={{ backgroundColor: rgbaOf(STATE_COLOR[STATES[code]], 0.85), color: "#fff" }}>{_cell}</td>;
