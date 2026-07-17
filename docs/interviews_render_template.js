@@ -185,7 +185,7 @@ function WorkflowUI(props) {
     var isCount = tcMode === "count";
     // counts mode: drop "not applicable" (it isn't an interview count) and fit the axis to the largest
     // applicable bar. % mode: by default keeps all 6 (stacks to 100% of total incl. N/A); when the user
-    // excludes N/A, drop it and rescale the 5 real states to 100% of applicable (matches the scoreboard).
+    // excludes N/A, drop it and rescale the 5 real states to 100% of applicable.
     var excl = tcMode === "pct" && naMode === "exclude";
     var barStates = (isCount || excl) ? BAR_ORDER5 : BAR_ORDER;
     var tsRows = topicRowsFor(DATA.topicStatus, topicGroupMode);
@@ -749,10 +749,6 @@ function WorkflowUI(props) {
                 <p className="text-xs text-gray-400 px-1">Per-FLW status by topic, across all claimed FLWs (each topic stacks to 100%). Click a topic to break it down by cohort.</p>
                 <p className="text-xs text-gray-400 px-1">Each bar counts <span className="font-medium text-gray-500">enrollment slots</span> for that topic (claimed FLW × cohort — the completion-rate base), not unique FLWs. It includes people enrolled but not yet started, and counts anyone in two cohorts twice, so a bar can exceed the Overview unique-FLW total.</p>
                 <div className="flex flex-wrap items-center gap-2 px-1">
-                  {subBtn(topicChart, "stacked", setTopicChart, "Stacked bar")}
-                  {subBtn(topicChart, "scoreboard", setTopicChart, "Completion scoreboard")}
-                  {subBtn(topicChart, "heatmap", setTopicChart, "Heatmap")}
-                  <span className="mx-1 text-gray-300">|</span>
                   <span className="text-xs text-gray-400">Group:</span>
                   {subBtn(topicGroupMode, "topic", setTopicGroupMode, "By topic")}
                   {subBtn(topicGroupMode, "theme", setTopicGroupMode, "By theme")}
@@ -770,7 +766,7 @@ function WorkflowUI(props) {
                   )}
                 </div>
                 {topicChart === "stacked" && tcMode === "pct" && naMode === "exclude" && (
-                  <p className="text-xs text-gray-400 px-1">Excludes “not applicable”: the 5 real statuses rescale to <span className="font-medium text-gray-500">100% of the interviews that apply</span> (same base as the Completion scoreboard).</p>
+                  <p className="text-xs text-gray-400 px-1">Excludes “not applicable”: the 5 real statuses rescale to <span className="font-medium text-gray-500">100% of the interviews that apply</span>.</p>
                 )}
                 {topicGroupMode === "theme" && (
                   <p className="text-xs text-gray-400 px-1">Related topics pooled into themes (interview-level sum): <span className="font-medium text-gray-500">Malaria</span> = B,1,2,10,10S,10L,14 · <span className="font-medium text-gray-500">Water &amp; Diarrhea</span> = D,11,11S,11L · <span className="font-medium text-gray-500">Community &amp; FLW Profile</span> = E,12 · <span className="font-medium text-gray-500">Antibiotics &amp; ACT Use</span> = 8,8S,8L · <span className="font-medium text-gray-500">Medicine Quality</span> = 9,13,13L. Topics not in a theme stay individual.</p>
@@ -787,59 +783,6 @@ function WorkflowUI(props) {
                 </Legend>
                 {topicChart === "stacked" && (
                   <div style={{ height: Math.max(440, (topicRowsFor(DATA.topicStatus, topicGroupMode).length || 12) * 30) + "px" }}><canvas ref={barRef}></canvas></div>
-                )}
-                {topicChart === "scoreboard" && (
-                  <div className="px-1">
-                    <p className="text-xs text-gray-400 mb-2">% completed of the FLWs each {topicGroupMode === "theme" ? "theme" : "topic"} applies to (excludes the not-applicable group), sorted high → low.</p>
-                    {topicRowsFor(DATA.topicStatus, topicGroupMode).slice().sort(function (a, b) {
-                      var pa = a.applicable ? a.completed / a.applicable : -1;
-                      var pb = b.applicable ? b.completed / b.applicable : -1;
-                      return pb - pa;
-                    }).map(function (t) {
-                      var pct = t.applicable ? Math.round(1000 * t.completed / t.applicable) / 10 : null;
-                      return (
-                        <div key={t.code} className="flex items-center gap-2 py-1">
-                          <div className="text-xs text-gray-600 truncate" style={{ width: "13rem", flexShrink: 0 }}>{t.label || (t.code + " · " + (TOPIC_NAMES[t.code] || t.code))}</div>
-                          <div className="flex-1" style={{ background: "#f1f5f9", borderRadius: 4, height: 16, minWidth: 120 }}>
-                            <div title={(pct == null ? "—" : pct + "%") + " completed"} style={{ width: (pct == null ? 0 : pct) + "%", background: STATE_COLOR["completed"], height: "100%", borderRadius: 4 }}></div>
-                          </div>
-                          <div className="text-xs font-medium text-gray-700 text-right" style={{ width: "3.5rem", flexShrink: 0 }}>{pct == null ? "—" : pct + "%"}</div>
-                          <div className="text-xs text-gray-400 text-right" style={{ width: "5.5rem", flexShrink: 0 }}>applies {t.applicable}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {topicChart === "heatmap" && (
-                  <div className="overflow-x-auto px-1">
-                    <p className="text-xs text-gray-400 mb-2">Each cell = % of applicable FLWs in that stage (darker = higher). Rows = {topicGroupMode === "theme" ? "themes" : "topics"}, columns = the 5 applicable stages.</p>
-                    <table className="min-w-full border border-gray-200">
-                      <thead className="bg-gray-50"><tr>
-                        <th className={th + " text-left"}>{topicGroupMode === "theme" ? "Theme" : "Topic"}</th>
-                        <th className={th + " text-right"}>Applies</th>
-                        {BAR_ORDER5.map(function (s) { return <th key={s} className={th + " text-right"}>{STATE_LABEL[s]}</th>; })}
-                      </tr></thead>
-                      <tbody>
-                        {topicRowsFor(DATA.topicStatus, topicGroupMode).map(function (t) {
-                          return (
-                            <tr key={t.code}>
-                              <td className={td + " font-medium text-gray-700"}>{t.label || (t.code + " · " + (TOPIC_NAMES[t.code] || t.code))}</td>
-                              <td className={td + " text-right text-gray-400"}>{t.applicable}</td>
-                              {BAR_ORDER5.map(function (s) {
-                                var frac = t.applicable ? t[s] / t.applicable : 0;
-                                var pct = t.applicable ? Math.round(1000 * t[s] / t.applicable) / 10 : null;
-                                return (
-                                  <td key={s} className={td + " text-right"} style={{ backgroundColor: rgbaOf(STATE_COLOR[s], t.applicable ? (0.08 + 0.92 * frac) : 0) }}>
-                                    {pct == null ? "—" : pct + "%"}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
                 )}
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
