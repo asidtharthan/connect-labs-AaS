@@ -264,9 +264,9 @@ function WorkflowUI(props) {
                 );
               }) : <div className="px-3 py-2 text-xs text-gray-400">No matches</div>}
             </div>
-            <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-between">
-              <span className="text-xs text-gray-400">{selected.length ? selected.length + " selected" : "All (no filter)"}</span>
-              {selected.length ? <button onClick={function () { setSelected([]); setGPage(0); }} className="text-xs text-indigo-600 hover:underline font-medium">Clear</button> : null}
+            <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-between gap-2">
+              <button onClick={function () { var add = shown.map(function (o) { return o.value; }).filter(function (v) { return selected.indexOf(v) < 0; }); if (add.length) { setSelected(selected.concat(add)); setGPage(0); } }} className="text-xs text-indigo-600 hover:underline font-medium">Select all</button>
+              {selected.length ? <button onClick={function () { setSelected([]); setGPage(0); }} className="text-xs text-gray-500 hover:underline font-medium">Clear</button> : <span className="text-xs text-gray-400">All</span>}
             </div>
           </div>
         )}
@@ -287,9 +287,9 @@ function WorkflowUI(props) {
         <td className={td + " text-right"}>{iv.triggered}</td>
         <td className={td + " text-right text-gray-500"}>{iv.pct_trig}%</td>
         <td className={td + " text-right" + (changed ? " text-amber-700 font-medium" : "")} title={changed ? "de-impacted (raw " + iv.started + ")" : ""}>{stVal}</td>
-        <td className={td + " text-right text-gray-500"}>{pstVal}%</td>
-        <td className={td + " text-right text-green-700 font-medium"}>{iv.completed}</td>
-        <td className={td + " text-right text-gray-500"}>{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</td>
+        <td className={td + " text-right text-green-700 font-semibold"}>{pstVal}%</td>
+        <td className={td + " text-right"}>{iv.completed}</td>
+        <td className={td + " text-right text-green-700 font-semibold"}>{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</td>
       </tr>
     );
   }
