@@ -976,9 +976,9 @@ function WorkflowUI(props) {
                                               <td className={td + " text-right"}>{iv.triggered}</td>
                                               <td className={td + " text-right text-gray-500"}>{iv.pct_trig}%</td>
                                               <td className={td + " text-right"}>{iv.started}</td>
-                                              <td className={td + " text-right text-gray-500"}>{iv.pct_started}%</td>
-                                              <td className={td + " text-right text-green-700 font-medium"}>{iv.completed}</td>
-                                              <td className={td + " text-right text-gray-500"}>{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</td>
+                                              <td className={td + " text-right text-green-700 font-semibold"}>{iv.pct_started}%</td>
+                                              <td className={td + " text-right"}>{iv.completed}</td>
+                                              <td className={td + " text-right text-green-700 font-semibold"}>{iv.pct_completed == null ? "—" : iv.pct_completed + "%"}</td>
                                             </tr>
                                           );
                                         })}
