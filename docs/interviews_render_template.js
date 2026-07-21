@@ -174,7 +174,7 @@ function WorkflowUI(props) {
           backgroundColor: col, fill: false, tension: 0.2, spanGaps: false, borderWidth: 3,
           hidden: !!hidSg[s.sg], borderDash: inProgress ? [8, 5] : undefined }; }) },
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { title: { display: true, text: days ? "Median days from each subgroup's first interview to interview N (x = interview number) — pacing/cadence; a flat final step = the last two interviews were triggered back-to-back" : "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { display: false } },
+        plugins: { title: { display: true, text: days ? "Median days from each subgroup's first interview to interview N (x = interview number) — pacing/cadence. A flat final step = the last two interviews were triggered back-to-back (the penultimate-interview artifact; corrected via Raw/De-impacted on the % Started view)." : "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { display: false } },
         scales: { y: days ? { beginAtZero: true, title: { display: true, text: "Median days since first interview" } } : { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
