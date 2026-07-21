@@ -63,10 +63,12 @@ line_series = []
 _line_di = payload.get("line_pct_started_di", {})
 _line_st = payload.get("line_status", {})
 _line_active = payload.get("line_active", {})
+_line_days = payload.get("line_days", {})
 for sg in SG_ORDER:
     line_series.append({"sg": sg, "base": len(elig_sg.get(sg, set())),
                         "pts": payload["line_pct_started"].get(sg, []),
                         "pts_di": _line_di.get(sg, []),       # de-impacted %started (item 8)
+                        "days": _line_days.get(sg, []),       # median days interview-1 -> interview-N (cadence view)
                         "status": _line_st.get(sg, []),       # per-point release status (items A1/A2)
                         "active": _line_active.get(sg, False)})  # still triggering -> dotted line
 
