@@ -46,7 +46,7 @@ function WorkflowUI(props) {
   var dimp = React.useState(false);
   var deImpact = dimp[0], setDeImpact = dimp[1];   // item 8: raw vs de-impacted (penult/last artifact)
   var lvm = React.useState("pct");
-  var lineMode = lvm[0], setLineMode = lvm[1];   // funnels line chart y-axis: pct (%Started retention) | days (cadence: median days since interview 1)
+  var lineMode = lvm[0], setLineMode = lvm[1];   // funnels retention chart x-axis: pct (by interview #) | time (by real calendar days since first interview); y is % Started in both
   var lsg = React.useState({}); var hidSg = lsg[0], setHidSg = lsg[1];   // funnels line chart: hidden subgroups (custom legend toggle)
   var lineRef = React.useRef(null), lineInst = React.useRef(null);
   var barRef = React.useRef(null), barInst = React.useRef(null);
@@ -155,27 +155,41 @@ function WorkflowUI(props) {
     if (activeTab !== "funnels") return;
     if (!lineRef.current || !window.Chart) return;
     if (lineInst.current) lineInst.current.destroy();
-    var days = lineMode === "days";
-    var maxLen = 0; DATA.lineSeries.forEach(function (s) { maxLen = Math.max(maxLen, (days ? (s.days || []) : s.pts).length); });
+    // Both modes show retention (% Started) on Y. "pct" = x is the interview ordinal (evenly spaced);
+    // "time" = x is real calendar days since the FLW's first interview (each dot at the day it landed).
+    var byDay = lineMode === "time";
+    var maxLen = 0; DATA.lineSeries.forEach(function (s) { maxLen = Math.max(maxLen, s.pts.length); });
     var labels = []; for (var i = 1; i <= maxLen; i++) labels.push("Int " + i);
     lineInst.current = new window.Chart(lineRef.current.getContext("2d"), {
       type: "line",
-      data: { labels: labels, datasets: DATA.lineSeries.map(function (s) {
-        var raw = days ? (s.days || []) : ((deImpact && s.pts_di && s.pts_di.length) ? s.pts_di : s.pts);
+      data: { labels: byDay ? undefined : labels, datasets: DATA.lineSeries.map(function (s) {
+        var raw = (deImpact && s.pts_di && s.pts_di.length) ? s.pts_di : s.pts;
         var st = s.status || [];
+        var dd = s.days || [];
         // not-available interviews (not yet offered) → null so the line ends instead of a false 0%
-        var pts = raw.map(function (v, i) { return st[i] === "not-available" ? null : v; });
+        var data;
+        if (byDay) {
+          // x = real days since first interview, y = % started; skip points with no day value
+          data = raw.map(function (v, i) {
+            if (dd[i] == null) return null;
+            return { x: dd[i], y: st[i] === "not-available" ? null : v };
+          }).filter(function (p) { return p !== null; });
+        } else {
+          data = raw.map(function (v, i) { return st[i] === "not-available" ? null : v; });
+        }
         var col = SG_COLOR[s.sg] || "#9ca3af";
         // Dot the whole line while the subgroup is still being triggered (bot actively handing out
         // interviews); solid once triggering has stopped. Uses the build's activity flag (real trigger
         // within 2x cadence); falls back to the release-window status for older builds without the flag.
         var inProgress = (s.active != null) ? !!s.active : st.some(function (x) { return x === "in-progress"; });
-        return { label: s.sg + " (n=" + s.base + ")", data: pts, borderColor: col,
+        return { label: s.sg + " (n=" + s.base + ")", data: data, borderColor: col,
           backgroundColor: col, fill: false, tension: 0.2, spanGaps: false, borderWidth: 3,
+          pointRadius: byDay ? 4 : 3, pointHoverRadius: 6,
           hidden: !!hidSg[s.sg], borderDash: inProgress ? [8, 5] : undefined }; }) },
       options: { responsive: true, maintainAspectRatio: false,
-        plugins: { title: { display: true, text: days ? "Median days from each subgroup's first interview to interview N (x = interview number) — pacing/cadence. A flat final step = the last two interviews were triggered back-to-back (the penultimate-interview artifact; corrected via Raw/De-impacted on the % Started view)." : "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { display: false } },
-        scales: { y: days ? { beginAtZero: true, title: { display: true, text: "Median days since first interview" } } : { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } }, x: { title: { display: true, text: "Interview #" } } } }
+        plugins: { title: { display: true, text: byDay ? "% FLWs still starting each interview, plotted against real days since their first interview — each dot is an interview at the day it landed; two dots on ~the same day = the last two triggered back-to-back (penultimate artifact)" : "% FLWs who started each interview round (denominator = # FLWs initiated, constant per subgroup) — solid = subgroup fully settled, dotted = subgroup still in progress, line ends where interviews aren't offered yet" }, legend: { display: false } },
+        scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% Started" } },
+          x: byDay ? { type: "linear", beginAtZero: true, title: { display: true, text: "Days since first interview" } } : { title: { display: true, text: "Interview #" } } } }
     });
     return function () { if (lineInst.current) { lineInst.current.destroy(); lineInst.current = null; } };
   }, [activeTab, deImpact, hidSg, lineMode]);
@@ -863,17 +877,13 @@ function WorkflowUI(props) {
           <div className="p-3 space-y-4">
             <div className="flex flex-wrap items-center gap-2 px-1">
               <span className="text-xs font-medium text-gray-600">View:</span>
-              {subBtn(lineMode, "pct", setLineMode, "% Started")}
-              {subBtn(lineMode, "days", setLineMode, "Days")}
-              {lineMode === "pct" ? (
-                <React.Fragment>
-                  <span className="mx-1 text-gray-300">|</span>
-                  <span className="text-xs font-medium text-gray-600">Penult/last artifact:</span>
-                  {subBtn(deImpact ? "di" : "raw", "raw", function () { setDeImpact(false); }, "Raw")}
-                  {subBtn(deImpact ? "di" : "raw", "di", function () { setDeImpact(true); }, "De-impacted")}
-                </React.Fragment>
-              ) : null}
-              {lineMode === "pct" && deImpact ? (
+              {subBtn(lineMode, "pct", setLineMode, "By interview #")}
+              {subBtn(lineMode, "time", setLineMode, "By calendar day")}
+              <span className="mx-1 text-gray-300">|</span>
+              <span className="text-xs font-medium text-gray-600">Penult/last artifact:</span>
+              {subBtn(deImpact ? "di" : "raw", "raw", function () { setDeImpact(false); }, "Raw")}
+              {subBtn(deImpact ? "di" : "raw", "di", function () { setDeImpact(true); }, "De-impacted")}
+              {deImpact ? (
                 <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                   <span title={"FLWs removed from the last interview's Started (started last but not penultimate, triggered back-to-back):\n" + Object.keys(DATA.deimpact || {}).sort().map(function (sg) { return "  " + sg + ": " + DATA.deimpact[sg].count; }).join("\n") + "\n  Total: " + Object.keys(DATA.deimpact || {}).reduce(function (a, sg) { return a + DATA.deimpact[sg].count; }, 0)}
                     className="cursor-help font-bold border border-amber-400 rounded-full w-4 h-4 inline-flex items-center justify-center shrink-0">ℹ</span>
