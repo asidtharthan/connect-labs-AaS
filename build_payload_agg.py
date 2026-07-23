@@ -181,14 +181,15 @@ for sg in SG_PRESENT:
         series.append(round(100 * s / elig, 1))
         series_di.append(round(100 * s_di / elig, 1))
         statuses.append(st)
-        # median days from this FLW's interview-1 trigger to interview-n trigger (cadence view).
-        # Population = FLWs triggered for interview n who also have an interview-1 trigger. n=1 -> 0.
+        # median days from when the FLW DID interview 1 (session start) to when they DID interview n.
+        # Anchored on the actual OCS session start (not the trigger), so day 0 = "the day they did their
+        # first interview". Population = FLWs who STARTED interview n and have an interview-1 session. n=1 -> 0.
         day_vals = []
-        for flw in f["t"]:
-            t1 = bm.triggers_by_flw_iv.get((flw, topic1))
-            tn = bm.triggers_by_flw_iv.get((flw, tc))
-            if t1 and tn:
-                day_vals.append((tn[0]["received_on"] - t1[0]["received_on"]).total_seconds() / 86400.0)
+        for flw in f["s"]:
+            s1 = bm.session_start_by_flw_iv.get((flw, topic1))
+            sn = bm.session_start_by_flw_iv.get((flw, tc))
+            if s1 and sn:
+                day_vals.append((sn - s1).total_seconds() / 86400.0)
         med_days = _median(day_vals)
         days_series.append(round(med_days, 1) if med_days is not None else None)
     line[sg] = series
@@ -448,7 +449,7 @@ payload = {
     },
     "funnel": funnel,
     "line_pct_started": line,
-    "line_days": line_days,           # median days from interview-1 to interview-N trigger (cadence view)
+    "line_days": line_days,           # median days from when FLW DID interview-1 to interview-N (session start)
     "line_pct_started_di": line_di,   # de-impacted %started series (item 8)
     "line_status": line_status,       # per-point release status (not-available/in-progress/settled)
     "line_active": line_active,       # per-subgroup: still actively triggering -> dotted funnel line

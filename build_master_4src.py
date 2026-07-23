@@ -388,6 +388,18 @@ for (flw, iv), trs in triggers_by_flw_iv.items():
         if best:
             claimed.add(best["sid"])
 
+# Per-(flw, interview topic) EARLIEST matched session START date (OCS created_at) = when the FLW
+# actually DID that interview. Feeds the "days since they did their first interview" retention x-axis
+# (build_payload_agg line_days) — distinct from trigger_received_on (when the bot merely offered it).
+session_start_by_flw_iv = {}
+for (_flw, _iv), _trs in triggers_by_flw_iv.items():
+    for _tb in _trs:
+        _m = matched.get(_tb["form_id"])
+        if _m and _m.get("first"):
+            _k = (_flw, _iv)
+            if _k not in session_start_by_flw_iv or _m["first"] < session_start_by_flw_iv[_k]:
+                session_start_by_flw_iv[_k] = _m["first"]
+
 # ---------------- emit master ----------------
 rows = []
 for (flw, iv), trs in triggers_by_flw_iv.items():
